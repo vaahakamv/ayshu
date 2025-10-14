@@ -1,0 +1,62 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Panel · Vaahaka</title>
+<link rel="stylesheet" href="/ayshu/assets/app.css?v=3">
+</head><body>
+<header class="nav">
+  <div class="wrap bar" style="justify-content:space-between;">
+    <a href="/ayshu/" class="brand">Vaahaka</a>
+    <nav class="bar">
+      <a href="/ayshu/explore.html">Explore</a>
+      <a href="/ayshu/write.html">Write</a>
+      <a href="/ayshu/about.html">About</a>
+      <a href="/ayshu/mypanel.html">My Panel</a>
+    </nav>
+  </div>
+</header>
+<div id="toast" class="toast"></div>
+
+<div class="wrap section">
+  <div id="authBar" class="card bar" style="display:flex; gap:8px;">
+    <input id="email" placeholder="Email">
+    <input id="pass" type="password" placeholder="Password">
+    <button id="btnLogin">Login</button>
+    <button id="btnSignup" class="ghost">Sign up</button>
+    <button id="btnGoogle" class="ghost">Google</button>
+  </div>
+  <div id="userBar" class="card bar" style="display:none; justify-content:space-between;">
+    <div id="who" class="muted"></div>
+    <div class="bar"><button id="btnLogout" class="ghost">Logout</button></div>
+  </div>
+</div>
+<script type="module">
+  import { wireAuthBar } from "/ayshu/assets/firebase.js?v=103"; wireAuthBar();
+</script>
+
+<div class="wrap section"><h2>My Submissions</h2><div id="mine" class="grid cards"></div></div>
+<div class="wrap section"><h2>Owner Queue (Pending)</h2><div class="muted">Only visible to owners.</div><div id="queue" class="grid cards"></div></div>
+<script type="module">
+  import { auth, getRole, listMyStories, listAllStories, updateStatus, deleteStory, toast } from "/ayshu/assets/firebase.js?v=103";
+  const mine = document.getElementById('mine'); const queue = document.getElementById('queue');
+  const cardMy=(s)=>`<div class="card"><div><b>${s.title||'(untitled)'} </b></div><div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div><div class="bar" style="margin-top:8px"><a class="pill" href="/ayshu/story.html?id=${s.id}">Open</a></div></div>`;
+  const cardPending=(s, owner)=> owner ? `<div class="card"><div><b>${s.title||'(untitled)'} </b></div><div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div><div class="bar" style="margin-top:8px"><button data-act="approve" data-id="${s.id}" class="ghost">Approve</button><button data-act="publish" data-id="${s.id}">Publish</button><button data-act="unpublish" data-id="${s.id}" class="ghost">Unpublish</button><button data-act="delete" data-id="${s.id}" class="ghost">Delete</button></div></div>` : '';
+  async function load(){ const u = auth.currentUser;
+    if (!u){ mine.innerHTML='<div class="muted">Log in to see your submissions.</div>'; queue.innerHTML=''; return; }
+    const role = await getRole(u.uid);
+    const rows = await listMyStories(u.uid, 200);
+    mine.innerHTML = rows.length ? rows.map(cardMy).join('') : '<div class="muted">No submissions yet.</div>';
+    if (role==='owner'){ const all = await listAllStories(400); const pending = all.filter(x=>x.status==='pending' || x.status==='approved');
+      queue.innerHTML = pending.length ? pending.map(x=>cardPending(x,true)).join('') : '<div class="muted">No pending submissions.</div>';
+    } else { queue.innerHTML = '<div class="muted">Owner only.</div>'; }
+  } window.addEventListener('firebase-auth-changed', load); load();
+  queue.addEventListener('click', async (e)=>{ const btn = e.target.closest('button'); if(!btn) return;
+    const id = btn.getAttribute('data-id'); const act=btn.getAttribute('data-act');
+    try{ if (act==='approve'){ await updateStatus(id,'approved'); toast('Approved'); }
+         if (act==='publish'){ await updateStatus(id,'published'); toast('Published'); }
+         if (act==='unpublish'){ await updateStatus(id,'approved'); toast('Unpublished'); }
+         if (act==='delete'){ if (confirm('Delete this story? This cannot be undone.')){ await deleteStory(id); toast('Deleted'); } }
+         await load();
+    }catch(err){ console.error(err); toast(err?.message||'Action failed'); }
+  });
+</script>
+</body></html>

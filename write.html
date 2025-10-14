@@ -1,0 +1,71 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Write · Vaahaka</title>
+<link rel="stylesheet" href="/ayshu/assets/app.css?v=3">
+</head><body>
+<header class="nav">
+  <div class="wrap bar" style="justify-content:space-between;">
+    <a href="/ayshu/" class="brand">Vaahaka</a>
+    <nav class="bar">
+      <a href="/ayshu/explore.html">Explore</a>
+      <a href="/ayshu/write.html">Write</a>
+      <a href="/ayshu/about.html">About</a>
+      <a href="/ayshu/mypanel.html">My Panel</a>
+    </nav>
+  </div>
+</header>
+<div id="toast" class="toast"></div>
+
+<div class="wrap section">
+  <div id="authBar" class="card bar" style="display:flex; gap:8px;">
+    <input id="email" placeholder="Email">
+    <input id="pass" type="password" placeholder="Password">
+    <button id="btnLogin">Login</button>
+    <button id="btnSignup" class="ghost">Sign up</button>
+    <button id="btnGoogle" class="ghost">Google</button>
+  </div>
+  <div id="userBar" class="card bar" style="display:none; justify-content:space-between;">
+    <div id="who" class="muted"></div>
+    <div class="bar"><button id="btnLogout" class="ghost">Logout</button></div>
+  </div>
+</div>
+<script type="module">
+  import { wireAuthBar } from "/ayshu/assets/firebase.js?v=103"; wireAuthBar();
+</script>
+
+<div class="wrap section">
+  <h2>New Story</h2>
+  <div id="verifyNote" class="muted" style="margin:8px 0">You must be logged in and email verified to submit.</div>
+  <div class="grid" style="max-width:680px">
+    <label>Type<select id="type"><option value="single">Single</option><option value="series">Series</option></select></label>
+    <label>Language<select id="language"><option value="dv">Dhivehi</option><option value="en">English</option></select></label>
+    <label>Title<input id="title" placeholder="Story title"></label>
+    <label>Genres <span class="muted">(separate with comma)</span><input id="genres" placeholder="Romance, Folklore"></label>
+    <label>Tags <span class="muted">(separate with comma)</span><input id="tags" placeholder="island, sea, mystery"></label>
+    <label>Body <span class="muted">(for Single, full text; for Series, this becomes Part 1)</span><textarea id="body" placeholder="Write your story..."></textarea></label>
+    <div class="bar"><button id="btnSubmit">Submit for review</button><button id="btnClear" class="ghost">Clear</button></div>
+  </div>
+</div>
+<script type="module">
+  import { auth, toast, createStoryShell, createSinglePost, addSeriesPart } from "/ayshu/assets/firebase.js?v=103";
+  const el=(id)=>document.getElementById(id);
+  const E={ type:el('type'), language:el('language'), title:el('title'), genres:el('genres'), tags:el('tags'), body:el('body'), submit:el('btnSubmit'), clear:el('btnClear'), note:el('verifyNote') };
+  const getArr=(v)=> (v||'').split(',').map(s=>s.trim()).filter(Boolean);
+  E.clear.onclick=()=>{ E.title.value='';E.genres.value='';E.tags.value='';E.body.value=''; }
+  async function submit(){ const u = auth.currentUser;
+    if (!u){ toast('Log in first.'); return; }
+    if (!u.emailVerified){ toast('Verify your email first.'); return; }
+    if (!E.title.value.trim()){ toast('Title required'); return; }
+    E.submit.disabled = true;
+    try{ const id = await createStoryShell({ title:E.title.value.trim(), language:E.language.value, type:E.type.value, genres:getArr(E.genres.value), tags:getArr(E.tags.value), uid:u.uid });
+          const body = E.body.value.trim();
+          if (E.type.value==='single' && body) await createSinglePost(id, body);
+          else if (E.type.value==='series' && body) await addSeriesPart({ storyId:id, partNumber:1, title:`${E.title.value.trim()} — Part 1`, body });
+          E.title.value='';E.genres.value='';E.tags.value='';E.body.value='';
+          toast('Submitted for review ✅'); setTimeout(()=>location.href='/ayshu/mypanel.html', 900);
+    }catch(e){ console.error(e); toast(e?.message||'Submit failed'); } finally{ E.submit.disabled=false; }
+  }
+  document.getElementById('btnSubmit')?.addEventListener('click', submit);
+  window.addEventListener('firebase-auth-changed', ()=>{ const u=auth.currentUser; if (!E.note) return; E.note.style.display = (!u || !u.emailVerified)?'block':'none'; });
+</script>
+</body></html>

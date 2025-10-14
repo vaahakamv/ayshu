@@ -1,0 +1,54 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explore · Vaahaka</title>
+<link rel="stylesheet" href="/ayshu/assets/app.css?v=3">
+</head><body>
+<header class="nav">
+  <div class="wrap bar" style="justify-content:space-between;">
+    <a href="/ayshu/" class="brand">Vaahaka</a>
+    <nav class="bar">
+      <a href="/ayshu/explore.html">Explore</a>
+      <a href="/ayshu/write.html">Write</a>
+      <a href="/ayshu/about.html">About</a>
+      <a href="/ayshu/mypanel.html">My Panel</a>
+    </nav>
+  </div>
+</header>
+<div id="toast" class="toast"></div>
+
+<div class="wrap section">
+  <div id="authBar" class="card bar" style="display:flex; gap:8px;">
+    <input id="email" placeholder="Email">
+    <input id="pass" type="password" placeholder="Password">
+    <button id="btnLogin">Login</button>
+    <button id="btnSignup" class="ghost">Sign up</button>
+    <button id="btnGoogle" class="ghost">Google</button>
+  </div>
+  <div id="userBar" class="card bar" style="display:none; justify-content:space-between;">
+    <div id="who" class="muted"></div>
+    <div class="bar"><button id="btnLogout" class="ghost">Logout</button></div>
+  </div>
+</div>
+<script type="module">
+  import { wireAuthBar } from "/ayshu/assets/firebase.js?v=103"; wireAuthBar();
+</script>
+
+<div class="wrap section">
+  <h2>Explore</h2>
+  <div class="bar" style="margin:10px 0">
+    <select id="lang"><option value="all">All languages</option><option value="dv">Dhivehi</option><option value="en">English</option></select>
+    <select id="type"><option value="all">All types</option><option value="single">Single</option><option value="series">Series</option></select>
+  </div>
+  <div id="list" class="grid cards"></div>
+</div>
+<script type="module">
+  import { listPublishedStories } from "/ayshu/assets/firebase.js?v=103";
+  const L = document.getElementById('list'), lang = document.getElementById('lang'), type = document.getElementById('type');
+  const card = (s)=>`<a class="card" href="/ayshu/story.html?id=${s.id}"><div><b>${s.title||'(untitled)'}</b></div><div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · ${s.genres?.join(', ')||''}</div></a>`;
+  async function load(){ const rows = await listPublishedStories(200);
+    let r = rows; if (lang.value!=='all') r = r.filter(x=>x.language===lang.value);
+    if (type.value!=='all') r = r.filter(x=>x.type===type.value);
+    L.innerHTML = r.length ? r.map(card).join('') : '<div class="muted">Nothing matches.</div>'; }
+  lang.onchange = type.onchange = load; load();
+</script>
+</body></html>

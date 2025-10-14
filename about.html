@@ -1,0 +1,42 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About · Vaahaka</title>
+<link rel="stylesheet" href="/ayshu/assets/app.css?v=3">
+</head><body>
+<header class="nav">
+  <div class="wrap bar" style="justify-content:space-between;">
+    <a href="/ayshu/" class="brand">Vaahaka</a>
+    <nav class="bar">
+      <a href="/ayshu/explore.html">Explore</a>
+      <a href="/ayshu/write.html">Write</a>
+      <a href="/ayshu/about.html">About</a>
+      <a href="/ayshu/mypanel.html">My Panel</a>
+    </nav>
+  </div>
+</header>
+<div id="toast" class="toast"></div>
+
+<section class="hero"><div class="wrap"><h1>About Vaahaka</h1><p class="muted">A home for original stories in Dhivehi and English. Singles and weekly series. All submissions are reviewed.</p></div></section>
+
+<div class="wrap section">
+  <div id="authBar" class="card bar" style="display:flex; gap:8px;">
+    <input id="email" placeholder="Email">
+    <input id="pass" type="password" placeholder="Password">
+    <button id="btnLogin">Login</button>
+    <button id="btnSignup" class="ghost">Sign up</button>
+    <button id="btnGoogle" class="ghost">Google</button>
+  </div>
+  <div id="userBar" class="card bar" style="display:none; justify-content:space-between;">
+    <div id="who" class="muted"></div>
+    <div class="bar"><button id="btnLogout" class="ghost">Logout</button></div>
+  </div>
+</div>
+<script type="module">
+  import { wireAuthBar } from "/ayshu/assets/firebase.js?v=103"; wireAuthBar();
+</script>
+
+<div class="wrap section"><div class="grid">
+  <section lang="en" dir="ltr" class="card"><h2>Guidelines</h2><ul><li>Original work only</li><li>Select relevant genres and tags</li><li>Mark 18+ content where applicable</li><li>No harassment or hate</li></ul><h2>Contact</h2><p>Collaborations: <a href="mailto:ayshuaysh@gmail.com">ayshuaysh@gmail.com</a></p></section>
+  <section lang="dv" dir="rtl" class="card"><h2>ގައިޑްލައިން</h2><ul><li>އޮރިޖިނަލް ދައްކާ</li><li>ޖެނރެ ނަގާ، ޓެގް ދެކޮޅު ހިނގާ</li><li><b>18+</b> ކޮންޓެންޓް މަރު ނަގާ</li><li>ހެއްޔެވެސް ނުކުރޭ</li></ul><h2>މަސްފައިތު</h2><p><a href="mailto:ayshuaysh@gmail.com">ayshuaysh@gmail.com</a></p></section>
+</div></div>
+</body></html>

@@ -1,0 +1,52 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home · Vaahaka</title>
+<link rel="stylesheet" href="/ayshu/assets/app.css?v=3">
+</head><body>
+<header class="nav">
+  <div class="wrap bar" style="justify-content:space-between;">
+    <a href="/ayshu/" class="brand">Vaahaka</a>
+    <nav class="bar">
+      <a href="/ayshu/explore.html">Explore</a>
+      <a href="/ayshu/write.html">Write</a>
+      <a href="/ayshu/about.html">About</a>
+      <a href="/ayshu/mypanel.html">My Panel</a>
+    </nav>
+  </div>
+</header>
+<div id="toast" class="toast"></div>
+
+<section class="hero"><div class="wrap">
+  <h1>Welcome to Vaahaka</h1>
+  <p class="muted">A light, modern space for original stories in Dhivehi and English — singles and weekly series.</p>
+</div></section>
+
+<div class="wrap section">
+  <div id="authBar" class="card bar" style="display:flex; gap:8px;">
+    <input id="email" placeholder="Email">
+    <input id="pass" type="password" placeholder="Password">
+    <button id="btnLogin">Login</button>
+    <button id="btnSignup" class="ghost">Sign up</button>
+    <button id="btnGoogle" class="ghost">Google</button>
+  </div>
+  <div id="userBar" class="card bar" style="display:none; justify-content:space-between;">
+    <div id="who" class="muted"></div>
+    <div class="bar"><button id="btnLogout" class="ghost">Logout</button></div>
+  </div>
+</div>
+<script type="module">
+  import { wireAuthBar } from "/ayshu/assets/firebase.js?v=103"; wireAuthBar();
+</script>
+
+<div class="wrap section"><h2>Trending</h2><div id="trending" class="grid cards"></div></div>
+<div class="wrap section"><h2>New</h2><div id="latest" class="grid cards"></div></div>
+<script type="module">
+  import { listTrending, listPublishedStories } from "/ayshu/assets/firebase.js?v=103";
+  const t = document.getElementById('trending'), l = document.getElementById('latest');
+  const card = (s)=>`<a class="card" href="/ayshu/story.html?id=${s.id}"><div><b>${s.title||'(untitled)'}</b></div><div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · ${s.genres?.join(', ')||''}</div></a>`;
+  (async ()=>{ try{
+    const trend = await listTrending(6); t.innerHTML = trend.length? trend.map(card).join('') : '<div class="muted">No trending yet.</div>';
+    const latest = await listPublishedStories(12); l.innerHTML = latest.length? latest.map(card).join('') : '<div class="muted">No stories yet.</div>';
+  }catch(e){ console.error(e); }})();
+</script>
+</body></html>
