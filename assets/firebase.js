@@ -154,7 +154,6 @@ export function wireAuthBar() {
   });
 
   log("auth bar wired");
-}
 
 function cleanAuthErr(e){
   const map = {
