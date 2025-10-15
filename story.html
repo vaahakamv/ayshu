@@ -17,28 +17,25 @@
 
     /* reader */
     .reader{background:#fff;border:1px solid var(--border);border-radius:20px;box-shadow:0 30px 80px rgba(20,12,0,.08);padding:18px}
-    .reader-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px}
-    .controls{display:flex;gap:6px;align-items:center}
-    .fsbtn{min-width:36px;height:32px}
     .story-body{font-size:1.06rem;line-height:1.85}
     .story-body p{margin:0 0 1.05em}
     .story-body p + p{text-indent:1.05em}
+
+    /* controls */
+    .controls{display:flex;gap:8px;align-items:center}
+    .fsbtn{min-width:36px;height:32px}
+    .reacts{display:flex;gap:8px;align-items:center}
+    .reacts button{display:inline-flex;gap:6px;align-items:center}
+    .reacts .pill{box-shadow:0 2px 10px rgba(255,102,0,.15)}
 
     /* prev/next */
     .pager{display:flex;justify-content:space-between;margin-top:16px}
 
     /* anti-copy: only the reading zone */
-    .nocopy{
-      -webkit-user-select:none;user-select:none;
-    }
-    .watermark{
-      pointer-events:none; position:fixed; inset:auto 0 8px 0;
-      text-align:center; font-size:11px; color:rgba(0,0,0,.25);
-    }
+    .nocopy{-webkit-user-select:none;user-select:none}
+    .watermark{pointer-events:none; position:fixed; inset:auto 0 8px 0; text-align:center; font-size:11px; color:rgba(0,0,0,.25)}
 
-    @media (min-width: 800px){
-      .story-body{font-size:1.12rem}
-    }
+    @media (min-width: 800px){ .story-body{font-size:1.12rem} }
   </style>
 </head>
 <body>
@@ -60,7 +57,11 @@
   <div class="topbar">
     <button id="btnClose" class="ghost">✕ Close</button>
     <div class="controls">
-      <span class="muted" style="font-size:12px">Font</span>
+      <div class="reacts">
+        <button id="btnLike" class="ghost" title="Like">👍 <span id="likeCnt">0</span></button>
+        <button id="btnLove" class="" title="Love">❤️ <span id="loveCnt">0</span></button>
+      </div>
+      <span class="muted" style="font-size:12px;margin-left:8px">Font</span>
       <button id="fsDec" class="ghost fsbtn" aria-label="Smaller">A−</button>
       <button id="fsInc" class="fsbtn" aria-label="Bigger">A+</button>
     </div>
@@ -83,8 +84,9 @@
 <script type="module">
   import {
     auth, getStory, getSinglePost,
-    listSeriesPartsOrdered, getAdjacentParts, bumpHot
-  } from "/ayshu/assets/firebase.js?v=116";
+    listSeriesPartsOrdered, getAdjacentParts, bumpHot,
+    getMyReaction, setReaction, getReactionsSummary
+  } from "/ayshu/assets/firebase.js?v=117";
 
   // ---- helpers
   const Q = new URLSearchParams(location.search);
@@ -94,19 +96,14 @@
   const $ = (id)=>document.getElementById(id);
   const titleEl = $('title'), metaEl=$('meta'), bodyEl=$('body'), partsEl=$('parts'), navEl=$('nav');
   const btnClose = $('btnClose'), fsDec=$('fsDec'), fsInc=$('fsInc'), wm=$('wm');
+  const btnLike = $('btnLike'), btnLove = $('btnLove'), likeCnt = $('likeCnt'), loveCnt = $('loveCnt');
 
   const esc = (s)=> (s||'').replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   const paras = (text)=> (text||'').split(/\n{2,}/).map(p=>`<p>${esc(p).replace(/\n/g,' ')}</p>`).join('');
   const linkTo = (sid, pn)=> `/ayshu/story.html?id=${encodeURIComponent(sid)}${pn?`&part=${pn}`:''}`;
 
-  // Close → back if possible else Explore
-  btnClose.onclick = ()=>{
-    if (document.referrer && new URL(document.referrer).origin === location.origin){
-      history.back();
-    } else {
-      location.href = '/ayshu/explore.html';
-    }
-  };
+  // Close always → Explore (avoids back-through-parts loop)
+  btnClose.onclick = ()=>{ location.href = '/ayshu/explore.html'; };
 
   // Font size controls (persist per-session)
   const FS_KEY = 'vaahaka_reader_fs';
@@ -139,6 +136,33 @@
   }
   window.addEventListener('firebase-auth-changed', showWatermark);
 
+  // --- Reactions
+  async function refreshReactions(){
+    try{
+      const { like, love } = await getReactionsSummary(storyId);
+      likeCnt.textContent = like;
+      loveCnt.textContent = love;
+
+      const uid = auth.currentUser?.uid || null;
+      const my = await getMyReaction(storyId, uid);
+      btnLike.classList.toggle('pill', !!my.like);
+      btnLove.classList.toggle('pill', !!my.love);
+    }catch{}
+  }
+  async function toggleReaction(kind){
+    const u = auth.currentUser;
+    if (!u){ alert('Log in to react'); return; }
+    try{
+      const my = await getMyReaction(storyId, u.uid);
+      await setReaction(storyId, u.uid, kind, !my[kind]);
+      refreshReactions();
+    }catch(e){ console.error(e); }
+  }
+  btnLike?.addEventListener('click', ()=> toggleReaction('like'));
+  btnLove?.addEventListener('click', ()=> toggleReaction('love'));
+  window.addEventListener('firebase-auth-changed', refreshReactions);
+
+  // --- Main load
   async function load(){
     const s = await getStory(storyId).catch(()=>null);
     if (!s){ titleEl.textContent='Not found'; metaEl.textContent=''; bodyEl.innerHTML=''; partsEl.innerHTML=''; navEl.innerHTML=''; return; }
@@ -180,6 +204,7 @@
 
     try{ await bumpHot(storyId, 1); }catch{}
     showWatermark();
+    refreshReactions();
   }
 
   load();
