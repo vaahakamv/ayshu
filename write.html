@@ -3,17 +3,22 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Write · Vaahaka</title>
-  <link rel="stylesheet" href="/ayshu/assets/app.css?v=5">
+  <link rel="stylesheet" href="/ayshu/assets/app.css?v=8">
   <style>
-    /* Lightweight modal */
+    /* Modal */
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:50}
-    .modal{background:#fff;max-width:720px;width:92%;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.15)}
+    .modal{background:#fff;max-width:760px;width:92%;border-radius:14px;box-shadow:0 16px 48px rgba(0,0,0,.18)}
     .modal header{padding:16px 18px;border-bottom:1px solid #eee}
     .modal main{padding:16px 18px;max-height:60vh;overflow:auto}
     .modal footer{padding:12px 18px;border-top:1px solid #eee;display:flex;gap:8px;justify-content:flex-end;align-items:center}
     .modal small, .modal li{font-size:13px;line-height:1.6}
     .muted-sm{font-size:12px;color:#666}
-    .blocked{opacity:.6;pointer-events:none}
+
+    /* Auth flicker guard */
+    #authSection[data-auth-ready="0"]{visibility:hidden;height:0;margin:0;padding:0;overflow:hidden}
+
+    /* Disable look */
+    .blocked{opacity:.5;pointer-events:none}
   </style>
 </head>
 <body>
@@ -31,28 +36,47 @@
 
 <div id="toast" class="toast"></div>
 
-<div class="wrap section" style="max-width:780px">
+<!-- Auth (shows only when logged out; no flicker) -->
+<div class="wrap section" id="authSection" data-auth-ready="0">
+  <div id="authBar" class="card bar" style="display:flex; gap:8px;">
+    <input id="email" placeholder="Email">
+    <input id="pass" type="password" placeholder="Password">
+    <button id="btnLogin">Login</button>
+    <button id="btnSignup" class="ghost">Sign up</button>
+    <button id="btnGoogle" class="ghost">Google</button>
+  </div>
+  <div id="userBar" class="card bar" style="display:none; justify-content:space-between;">
+    <div id="who" class="muted"></div>
+    <div class="bar"><button id="btnLogout" class="ghost">Logout</button></div>
+  </div>
+</div>
+<script type="module">
+  import { wireAuthBar } from "/ayshu/assets/firebase.js?v=114";
+  wireAuthBar();
+</script>
+
+<div class="wrap section" style="max-width:820px">
   <h2>New Story</h2>
   <p class="muted" style="margin:6px 0 16px">
-    Write an original story. Singles publish as one piece; Series can be posted in weekly parts.
+    Write an original story. <b>Single</b> publishes as one piece. <b>Series</b> can be posted in weekly parts.
   </p>
 
   <div id="verifyNote" class="muted" style="margin:8px 0">
-    You must be logged in and email verified to submit. Go to <a href="/ayshu/mypanel.html">My Panel</a> to log in.
+    You must be logged in and email verified to submit.
   </div>
 
   <div class="grid">
     <label>Type
       <select id="type">
-        <option value="single">Single</option>
+        <option value="single" selected>Single</option>
         <option value="series">Series</option>
       </select>
     </label>
 
     <label>Language
       <select id="language">
+        <option value="en" selected>English</option>
         <option value="dv">Dhivehi</option>
-        <option value="en">English</option>
       </select>
     </label>
 
@@ -68,15 +92,23 @@
       <input id="tags" placeholder="island, sea, mystery">
     </label>
 
+    <!-- Shown only for Series -->
+    <label id="partWrap" style="display:none">Part number
+      <input id="partNumber" type="number" min="1" value="1" />
+      <div class="muted-sm">Use the correct sequence (e.g., Part 1, Part 2…). You can add more parts later from <b>My Panel</b>.</div>
+    </label>
+
     <label>Body
-      <span class="muted">(for <b>Single</b>, full text; for <b>Series</b>, this becomes <b>Part&nbsp;1</b>)</span>
+      <span class="muted">
+        For <b>Single</b>, paste the full story. For <b>Series</b>, this will be the text of <b>Part&nbsp;1</b> (or the selected part).
+      </span>
       <textarea id="body" placeholder="Write your story..."></textarea>
     </label>
 
     <div class="bar" style="align-items:center;gap:10px">
       <button id="btnSubmit" class="blocked">Submit for review</button>
       <button id="btnClear" class="ghost">Clear</button>
-      <button id="btnViewTerms" class="ghost">View terms</button>
+      <button id="btnViewTerms" class="ghost">Submission terms</button>
       <span id="agreeStatus" class="muted-sm"></span>
     </div>
   </div>
@@ -86,39 +118,35 @@
   </p>
 </div>
 
-<!-- TERMS & GUIDELINES MODAL (one-time agree) -->
+<!-- TERMS & GUIDELINES MODAL (one-time agree, no checkbox) -->
 <div id="termsModal" class="modal-backdrop">
   <div class="modal">
     <header><h3 style="margin:0">Submission Terms & Guidelines</h3></header>
     <main>
-      <p class="muted-sm">Please read and agree once. You can view this again from the Write page.</p>
+      <p class="muted-sm">Please read and agree once. You can view this again anytime from the Write page.</p>
       <ul>
-        <li><b>Originality:</b> Submit only your own original writing. No plagiarism or AI-generated content passed as your own. Credit any quotes with permission.</li>
+        <li><b>Originality:</b> Submit only your own original writing. No plagiarism or AI-generated content presented as your own. Credit any quotes with permission.</li>
         <li><b>Languages:</b> Dhivehi and English are supported. Use one per story; no auto-translations.</li>
         <li><b>Genres & Tags:</b> Pick accurate genres and helpful tags so readers can find your work.</li>
         <li><b>Adult content:</b> Mark 18+ if applicable. Explicit illegal content is not allowed.</li>
         <li><b>Respect:</b> No hate speech, harassment, or targeted abuse.</li>
         <li><b>Series:</b> Keep parts in order. Use clear titles (e.g., “Title — Part 2”).</li>
         <li><b>Review & Moderation:</b> All submissions are reviewed. Editors may request edits or reject content that violates these terms.</li>
-        <li><b>Publication:</b> “Published” pieces are visible on Explore. You can request edits; changes re-enter review.</li>
-        <li><b>Copyright & Takedown:</b> We respond to infringement claims. Confirm you own the rights to publish the work here.</li>
+        <li><b>Publication:</b> “Published” pieces appear on Explore. Edits to published stories re-enter review.</li>
+        <li><b>Copyright & Takedown:</b> You own the rights or have permission to publish. We respond to infringement claims.</li>
         <li><b>Penalties:</b> Proven plagiarism or repeated violations → removal/unpublish and account ban. Serious abuse may be reported.</li>
         <li><b>Privacy:</b> Don’t post private information about others without explicit permission.</li>
       </ul>
     </main>
     <footer>
-      <label style="margin-right:auto;display:flex;gap:8px;align-items:center">
-        <input id="agreeCheckbox" type="checkbox">
-        <span class="muted-sm">I have read and agree to these terms.</span>
-      </label>
-      <button id="btnCancelTerms" class="ghost">Cancel</button>
-      <button id="btnAgreeTerms" class="pill">I Agree</button>
+      <button id="btnCancelTerms" class="ghost">Close</button>
+      <button id="btnAgreeTerms" class="pill">I Agree & Continue</button>
     </footer>
   </div>
 </div>
 
 <script type="module">
-  import { auth, toast, createStoryShell, createSinglePost, addSeriesPart } from "/ayshu/assets/firebase.js?v=113";
+  import { auth, toast, createStoryShell, createSinglePost, addSeriesPart } from "/ayshu/assets/firebase.js?v=114";
 
   // ----- elements
   const $ = id => document.getElementById(id);
@@ -129,6 +157,8 @@
     genres: $('genres'),
     tags: $('tags'),
     body: $('body'),
+    partWrap: $('partWrap'),
+    partNumber: $('partNumber'),
     submit: $('btnSubmit'),
     clear: $('btnClear'),
     viewTerms: $('btnViewTerms'),
@@ -136,7 +166,6 @@
     agreeStatus: $('agreeStatus'),
 
     modal: $('termsModal'),
-    agreeCb: $('agreeCheckbox'),
     cancelTerms: $('btnCancelTerms'),
     agreeTerms: $('btnAgreeTerms')
   };
@@ -149,55 +178,60 @@
   const isAgreed = () => localStorage.getItem(TERMS_KEY) === '1';
   const setAgreed = () => localStorage.setItem(TERMS_KEY, '1');
 
+  function show(el, flag){ el.style.display = flag ? '' : 'none'; }
+
   function updateUIState() {
     // show/hide verify note
     const u = auth.currentUser;
     if (E.note) E.note.style.display = (!u || !u.emailVerified) ? 'block' : 'none';
 
+    // show part number for series
+    show(E.partWrap, E.type.value === 'series');
+
+    // button state
     const canSubmit = !!u && u.emailVerified && isAgreed() && !!E.title.value.trim();
     E.submit.classList.toggle('blocked', !canSubmit);
     E.submit.disabled = !canSubmit;
 
-    E.agreeStatus.textContent = isAgreed() ? 'Terms agreed ✓' : 'You must agree to the terms to submit.';
+    E.agreeStatus.textContent = isAgreed()
+      ? 'Terms agreed ✓'
+      : 'You must agree to the submission terms to submit.';
   }
 
-  function openTerms() {
-    E.modal.style.display = 'flex';
-    E.agreeCb.checked = isAgreed();
-  }
-  function closeTerms() {
-    E.modal.style.display = 'none';
-  }
+  function openTerms()  { E.modal.style.display = 'flex'; }
+  function closeTerms() { E.modal.style.display = 'none'; }
 
-  // ----- one-time modal
+  // open terms once if not agreed
   if (!isAgreed()) openTerms();
 
-  E.viewTerms.onclick = openTerms;
+  E.viewTerms.onclick   = openTerms;
   E.cancelTerms.onclick = closeTerms;
-  E.agreeTerms.onclick = () => {
-    if (!E.agreeCb.checked) { toast('Please check the box to agree.'); return; }
+  E.agreeTerms.onclick  = () => {
     setAgreed();
     closeTerms();
     updateUIState();
     toast('Thanks — terms accepted.');
   };
 
-  // ----- clear
-  E.clear.onclick = () => { E.title.value=''; E.genres.value=''; E.tags.value=''; E.body.value=''; updateUIState(); };
+  // clear
+  E.clear.onclick = () => {
+    E.title.value=''; E.genres.value=''; E.tags.value=''; E.body.value='';
+    if (E.type.value === 'series') E.partNumber.value = '1';
+    updateUIState();
+  };
 
-  // ----- form reactivity
-  ['input','change','keyup'].forEach(evt => {
-    E.title.addEventListener(evt, updateUIState);
-  });
+  // react to type change (series part UI) + title typing (enable submit)
+  ['change'].forEach(evt => E.type.addEventListener(evt, updateUIState));
+  ['input','change','keyup'].forEach(evt => E.title.addEventListener(evt, updateUIState));
 
-  // ----- auth reactivity (note: no auth bar here; users log in via My Panel)
+  // react to auth changes (auth bar handled by wireAuthBar)
   window.addEventListener('firebase-auth-changed', updateUIState);
   updateUIState();
 
-  // ----- submit handler
+  // submit
   async function submit() {
     const u = auth.currentUser;
-    if (!u) { toast('Log in first (My Panel).'); return; }
+    if (!u) { toast('Log in first.'); return; }
     if (!u.emailVerified) { toast('Verify your email first.'); return; }
     if (!isAgreed()) { toast('Please agree to the submission terms.'); return; }
     if (!E.title.value.trim()) { toast('Title required'); return; }
@@ -219,11 +253,18 @@
       if (E.type.value === 'single' && body) {
         await createSinglePost(id, body);
       } else if (E.type.value === 'series' && body) {
-        await addSeriesPart({ storyId: id, partNumber: 1, title: `${E.title.value.trim()} — Part 1`, body });
+        const pn = Math.max(1, parseInt(E.partNumber.value || '1', 10));
+        await addSeriesPart({
+          storyId: id,
+          partNumber: pn,
+          title: `${E.title.value.trim()} — Part ${pn}`,
+          body
+        });
       }
 
       // clear, toast, go to panel
       E.title.value=''; E.genres.value=''; E.tags.value=''; E.body.value='';
+      if (E.type.value === 'series') E.partNumber.value = '1';
       toast('Submitted for review ✅');
       setTimeout(() => location.href = '/ayshu/mypanel.html', 900);
     } catch (e) {
