@@ -41,27 +41,78 @@ export async function getRole(uid){
   return "user";
 }
 
-export function wireAuthBar(){
-  const emailEl = document.getElementById('email');
-  const passEl  = document.getElementById('pass');
-  const login   = document.getElementById('btnLogin');
-  const signup  = document.getElementById('btnSignup');
-  const google  = document.getElementById('btnGoogle');
-  const logout  = document.getElementById('btnLogout');
-  const authBar = document.getElementById('authBar');
-  const userBar = document.getElementById('userBar');
-  const who     = document.getElementById('who');
-  const verifyNote = document.getElementById('verifyNote');
-  const log = (...a)=>console.log("[AUTH]", ...a);
+// REPLACE your existing wireAuthBar with this:
+export function wireAuthBar() {
+  const authSection = document.getElementById('authSection'); // wrapper we add in HTML
+  const authBar     = document.getElementById('authBar');
+  const userBar     = document.getElementById('userBar');
 
-  if (login) login.onclick = async ()=>{
-    try{
-      const email=(emailEl?.value||"").trim(), pass=passEl?.value||"";
-      log("login click", email);
-      await signInWithEmailAndPassword(auth, email, pass);
-      toast(auth.currentUser?.emailVerified ? 'Logged in.' : 'Logged in. Verify your email.');
-    }catch(e){ console.error(e); toast(cleanAuthErr(e)); }
+  const email = document.getElementById('email');
+  const pass  = document.getElementById('pass');
+
+  const btnLogin  = document.getElementById('btnLogin');
+  const btnSignup = document.getElementById('btnSignup');
+  const btnGoogle = document.getElementById('btnGoogle');
+  const btnLogout = document.getElementById('btnLogout');
+  const who       = document.getElementById('who');
+
+  // Guard (page may not have these)
+  if (!authBar || !userBar) return;
+
+  let first = true;
+
+  // Show/hide helpers
+  function showLoggedOut() {
+    authBar.style.display = 'flex';
+    userBar.style.display = 'none';
+  }
+  function showLoggedIn(user) {
+    authBar.style.display = 'none';
+    userBar.style.display = 'flex';
+    if (who) {
+      const v = [];
+      v.push(user.email || '(no email)');
+      if (user.emailVerified) v.push('· verified');
+      who.textContent = v.join(' ');
+    }
+  }
+
+  // Auth handlers (keep yours if already wired similarly)
+  if (btnLogin)  btnLogin.onclick  = async () => {
+    try {
+      await signInWithEmailAndPassword(auth, email.value.trim(), pass.value);
+    } catch (e) { alert(e.message || 'Login failed'); }
   };
+  if (btnSignup) btnSignup.onclick = async () => {
+    try {
+      const { user } = await createUserWithEmailAndPassword(auth, email.value.trim(), pass.value);
+      try { await sendEmailVerification(user); } catch {}
+      alert('Signed up. Please verify your email.');
+    } catch (e) { alert(e.message || 'Signup failed'); }
+  };
+  if (btnGoogle) btnGoogle.onclick = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (e) { alert(e.message || 'Google sign-in failed'); }
+  };
+  if (btnLogout) btnLogout.onclick = async () => {
+    try { await signOut(auth); } catch {}
+  };
+
+  // IMPORTANT: only reveal the authSection after the FIRST state arrives
+  onAuthStateChanged(auth, (u) => {
+    if (u) showLoggedIn(u); else showLoggedOut();
+
+    // let other scripts know
+    window.dispatchEvent(new Event('firebase-auth-changed'));
+
+    if (first) {
+      first = false;
+      if (authSection) authSection.setAttribute('data-auth-ready', '1');
+    }
+  });
+}
 
   if (signup) signup.onclick = async ()=>{
     try{
