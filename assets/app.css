@@ -135,3 +135,12 @@ footer{border-top:1px solid var(--border);margin-top:28px}
   .nav a{padding:9px 8px}
 }
 [dir="rtl"]{direction:rtl;text-align:right}
+/* --- AUTH FLICKER FIX --- */
+/* Hide the whole auth block until Firebase finishes first auth check */
+#authSection[data-auth-ready="0"] {
+  visibility: hidden;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
