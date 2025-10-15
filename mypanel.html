@@ -2,7 +2,7 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>My Panel · Vaahaka</title>
-<link rel="stylesheet" href="/ayshu/assets/app.css?v=3">
+<link rel="stylesheet" href="/ayshu/assets/app.css?v=5">
 </head>
 <body>
 
@@ -13,12 +13,13 @@
       <a href="/ayshu/explore.html">Explore</a>
       <a href="/ayshu/write.html">Write</a>
       <a href="/ayshu/about.html">About</a>
-      <a href="/ayshu/mypanel.html">My Panel</a>
+      <a href="/ayshu/mypanel.html" aria-current="page">My Panel</a>
     </nav>
   </div>
 </header>
 <div id="toast" class="toast"></div>
 
+<!-- Auth bar -->
 <div class="wrap section">
   <div id="authBar" class="card bar" style="display:flex; gap:8px;">
     <input id="email" placeholder="Email">
@@ -33,24 +34,59 @@
   </div>
 </div>
 <script type="module">
-  import { wireAuthBar } from "/ayshu/assets/firebase.js?v=104"; wireAuthBar();
+  import { wireAuthBar } from "/ayshu/assets/firebase.js?v=109";
+  wireAuthBar();
 </script>
 
+<!-- My submissions -->
 <div class="wrap section">
   <h2>My Submissions</h2>
   <div id="mine" class="grid cards"></div>
 </div>
 
+<!-- Owner queue (hidden by default; only shown for owners in JS) -->
+<div class="wrap section" id="ownerSec" style="display:none">
+  <h2>Owner Queue</h2>
+  <div class="muted">Visible only to owners (nmmc@live.com, ayshuaysh@gmail.com).</div>
+  <div id="queue" class="grid cards"></div>
+</div>
+
 <script type="module">
-  import { auth, getRole, listMyStories, listAllStories, updateStatus, deleteStory, toast } from "/ayshu/assets/firebase.js?v=108";
+  // ONE clean module – no duplicates anywhere else on this page.
+  import {
+    auth, getRole, listMyStories, listAllStories,
+    updateStatus, deleteStory, toast
+  } from "/ayshu/assets/firebase.js?v=109";
 
   const ownerSec = document.getElementById('ownerSec');
-  const mine  = document.getElementById('mine');
-  const queue = document.getElementById('queue');
+  const mine     = document.getElementById('mine');
+  const queue    = document.getElementById('queue');
 
   const OWNER_EMAILS = new Set(["nmmc@live.com","ayshuaysh@gmail.com"]);
 
-  // Very explicit owner check (email OR roles doc); logs so we can see what's happening
+  // Cards
+  const cardMy = (s)=>`
+    <div class="card">
+      <div><b>${s.title || '(untitled)'}</b></div>
+      <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
+      <div class="bar" style="margin-top:8px">
+        <a class="pill" href="/ayshu/story.html?id=${s.id}">Open</a>
+      </div>
+    </div>`;
+
+  const cardOwner = (s)=>`
+    <div class="card">
+      <div><b>${s.title || '(untitled)'}</b></div>
+      <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
+      <div class="bar" style="margin-top:8px">
+        ${s.status === 'published'
+          ? `<button data-act="unpublish" data-id="${s.id}" class="ghost">Unpublish</button>`
+          : `<button data-act="publish" data-id="${s.id}">Publish</button>`}
+        <button data-act="delete" data-id="${s.id}" class="ghost">Delete</button>
+      </div>
+    </div>`;
+
+  // Determine owner (by email OR roles doc); add ?owner=1 override for emergency
   async function isOwner() {
     const u = auth.currentUser;
     if (!u) return false;
@@ -60,37 +96,17 @@
     try {
       const r = await getRole(u.uid);
       viaRole = (r === "owner");
-    } catch (_) {}
+    } catch {}
+    // Debug log (harmless in prod)
     console.log("[PANEL] user:", email, "viaEmail:", viaEmail, "viaRole:", viaRole);
     return viaEmail || viaRole || new URLSearchParams(location.search).get("owner") === "1";
   }
-
-  const cardMy = (s)=>`
-    <div class="card">
-      <div><b>${s.title||'(untitled)'}</b></div>
-      <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
-      <div class="bar" style="margin-top:8px">
-        <a class="pill" href="/ayshu/story.html?id=${s.id}">Open</a>
-      </div>
-    </div>`;
-
-  const cardOwner = (s)=>`
-    <div class="card">
-      <div><b>${s.title||'(untitled)'}</b></div>
-      <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
-      <div class="bar" style="margin-top:8px">
-        ${s.status === 'published'
-          ? `<button data-act="unpublish" data-id="${s.id}" class="ghost">Unpublish</button>`
-          : `<button data-act="publish" data-id="${s.id}">Publish</button>`}
-        <button data-act="delete" data-id="${s.id}" class="ghost">Delete</button>
-      </div>
-    </div>`;
 
   async function load(){
     const u = auth.currentUser;
 
     if (!u){
-      mine.innerHTML = '<div class="muted">Log in to see your submissions.</div>';
+      mine.innerHTML  = '<div class="muted">Log in to see your submissions.</div>';
       ownerSec.style.display = 'none';
       queue.innerHTML = '';
       return;
@@ -100,12 +116,14 @@
     const my = await listMyStories(u.uid, 200).catch(()=>[]);
     mine.innerHTML = my.length ? my.map(cardMy).join('') : '<div class="muted">No submissions yet.</div>';
 
-    // Owner section
+    // Owner queue
     if (await isOwner()){
       ownerSec.style.display = 'block';
       const all = await listAllStories(400).catch(()=>[]);
       const manageable = all.sort((a,b)=>(b?.createdAt?.seconds||0)-(a?.createdAt?.seconds||0));
-      queue.innerHTML = manageable.length ? manageable.map(cardOwner).join('') : '<div class="muted">Nothing to moderate.</div>';
+      queue.innerHTML = manageable.length
+        ? manageable.map(cardOwner).join('')
+        : '<div class="muted">Nothing to moderate.</div>';
     } else {
       ownerSec.style.display = 'none';
       queue.innerHTML = '';
@@ -115,6 +133,7 @@
   window.addEventListener('firebase-auth-changed', load);
   load();
 
+  // Actions
   queue.addEventListener('click', async (e)=>{
     const btn = e.target.closest('button'); if(!btn) return;
     const id  = btn.dataset.id, act = btn.dataset.act;
@@ -124,135 +143,6 @@
       if (act === 'delete' && confirm('Delete this story?')) await deleteStory(id);
       toast('Done'); await load();
     }catch(err){ console.error(err); toast(err?.message || 'Action failed'); }
-  });
-</script>
-
-  const cardMy = (s)=>`
-    <div class="card">
-      <div><b>${s.title||'(untitled)'}</b></div>
-      <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
-      <div class="bar" style="margin-top:8px">
-        <a class="pill" href="/ayshu/story.html?id=${s.id}">Open</a>
-      </div>
-    </div>`;
-
-  const cardOwner = (s)=>`
-    <div class="card">
-      <div><b>${s.title||'(untitled)'}</b></div>
-      <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
-      <div class="bar" style="margin-top:8px">
-        ${s.status === 'published'
-          ? `<button data-act="unpublish" data-id="${s.id}" class="ghost">Unpublish</button>`
-          : `<button data-act="publish" data-id="${s.id}">Publish</button>`}
-        <button data-act="delete" data-id="${s.id}" class="ghost">Delete</button>
-      </div>
-    </div>`;
-
-  async function load(){
-    const u = auth.currentUser;
-
-    if (!u){
-      mine.innerHTML = '<div class="muted">Log in to see your submissions.</div>';
-      ownerSec.style.display = 'none';
-      queue.innerHTML = '';
-      return;
-    }
-
-    const role = await getRole(u.uid).catch(()=>null);
-    const owner = role === 'owner' || isOwnerByEmail();
-
-    // my submissions (always visible to the user)
-    const my = await listMyStories(u.uid, 200);
-    mine.innerHTML = my.length ? my.map(cardMy).join('') : '<div class="muted">No submissions yet.</div>';
-
-    // owner section
-    if (owner){
-      ownerSec.style.display = 'block';
-      const all = await listAllStories(400);
-      const manageable = all.sort((a,b)=>(b?.createdAt?.seconds||0)-(a?.createdAt?.seconds||0));
-      queue.innerHTML = manageable.length ? manageable.map(cardOwner).join('') : '<div class="muted">Nothing to moderate.</div>';
-    } else {
-      ownerSec.style.display = 'none';
-      queue.innerHTML = '';
-    }
-  }
-
-  window.addEventListener('firebase-auth-changed', load);
-  load();
-
-  // actions
-  document.getElementById('queue').addEventListener('click', async (e)=>{
-    const btn = e.target.closest('button'); if(!btn) return;
-    const id  = btn.dataset.id, act = btn.dataset.act;
-    try{
-      if (act === 'publish')   await updateStatus(id,'published');
-      if (act === 'unpublish') await updateStatus(id,'approved');
-      if (act === 'delete' && confirm('Delete this story?')) await deleteStory(id);
-      toast('Done'); await load();
-    }catch(err){ console.error(err); toast(err?.message || 'Action failed'); }
-  });
-</script>
-
-<script type="module">
-  import { auth, getRole, listMyStories, listAllStories, updateStatus, deleteStory, toast } from "/ayshu/assets/firebase.js?v=104";
-
-  const mine  = document.getElementById('mine');
-  const queue = document.getElementById('queue');
-
-  const cardMy = (s)=>`
-    <div class="card">
-      <div><b>${s.title||'(untitled)'}</b></div>
-      <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
-      <div class="bar" style="margin-top:8px">
-        <a class="pill" href="/ayshu/story.html?id=${s.id}">Open</a>
-      </div>
-    </div>`;
-
-  const cardOwner = (s)=>`
-    <div class="card">
-      <div><b>${s.title||'(untitled)'}</b></div>
-      <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
-      <div class="bar" style="margin-top:8px">
-        ${s.status === 'published'
-            ? `<button data-act="unpublish" data-id="${s.id}" class="ghost">Unpublish</button>`
-            : `<button data-act="publish" data-id="${s.id}">Publish</button>`}
-        <button data-act="delete" data-id="${s.id}" class="ghost">Delete</button>
-      </div>
-    </div>`;
-
-  async function load(){
-    const u = auth.currentUser;
-    if (!u){ mine.innerHTML='<div class="muted">Log in to see your submissions.</div>'; queue.innerHTML=''; return; }
-
-    const role = await getRole(u.uid);
-    const my = await listMyStories(u.uid, 200);
-    mine.innerHTML = my.length ? my.map(cardMy).join('') : '<div class="muted">No submissions yet.</div>';
-
-    if (role === 'owner'){
-      const all = await listAllStories(400);
-      // Show everything except deleted; owners control visibility via publish/unpublish
-      const manageable = all.sort((a,b)=>(b?.createdAt?.seconds||0)-(a?.createdAt?.seconds||0));
-      queue.innerHTML = manageable.length ? manageable.map(cardOwner).join('') : '<div class="muted">Nothing to moderate.</div>';
-    } else {
-      queue.innerHTML = '<div class="muted">Owner only.</div>';
-    }
-  }
-
-  window.addEventListener('firebase-auth-changed', load); load();
-
-  queue.addEventListener('click', async (e)=>{
-    const btn = e.target.closest('button'); if(!btn) return;
-    const id  = btn.getAttribute('data-id');
-    const act = btn.getAttribute('data-act');
-    try{
-      if (act === 'publish')   { await updateStatus(id,'published'); toast('Published'); }
-      if (act === 'unpublish') { await updateStatus(id,'approved');  toast('Unpublished (status: approved)'); }
-      if (act === 'delete')    { if (confirm('Delete this story? This cannot be undone.')){ await deleteStory(id); toast('Deleted'); } }
-      await load();
-    }catch(err){
-      console.error(err);
-      toast(err?.message || 'Action failed');
-    }
   });
 </script>
 
