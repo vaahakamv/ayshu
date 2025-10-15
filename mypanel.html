@@ -3,6 +3,22 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>My Panel · Vaahaka</title>
 <link rel="stylesheet" href="/ayshu/assets/app.css?v=5">
+<style>
+  /* Lightweight overlay for previews */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);display:none;z-index:999}
+  .overlay.show{display:block}
+  .overlay .sheet{
+    position:relative; margin:4vh auto; max-width:900px;
+    background:#fff; border:1px solid var(--border); border-radius:20px;
+    box-shadow:0 30px 80px rgba(20,12,0,.25); padding:18px;
+    max-height:92vh; overflow:auto;
+  }
+  .overlay .close{position:sticky; top:-8px; float:right}
+  .overlay .meta{color:var(--muted); margin-bottom:8px}
+  .overlay .body{font-size:1.06rem; line-height:1.85}
+  .overlay .body p{margin:0 0 1.05em}
+  .overlay .body p + p{text-indent:1.1em}
+</style>
 </head>
 <body>
 
@@ -34,7 +50,7 @@
   </div>
 </div>
 <script type="module">
-  import { wireAuthBar } from "/ayshu/assets/firebase.js?v=109";
+  import { wireAuthBar } from "/ayshu/assets/firebase.js?v=110";
   wireAuthBar();
 </script>
 
@@ -44,25 +60,111 @@
   <div id="mine" class="grid cards"></div>
 </div>
 
-<!-- Owner queue (hidden by default; only shown for owners in JS) -->
+<!-- Owner queue (hidden by default; shown only for owners) -->
 <div class="wrap section" id="ownerSec" style="display:none">
   <h2>Owner Queue</h2>
   <div class="muted">Visible only to owners (nmmc@live.com, ayshuaysh@gmail.com).</div>
   <div id="queue" class="grid cards"></div>
 </div>
 
+<!-- Preview overlay (used by owners and authors for any status) -->
+<div id="preview" class="overlay">
+  <div class="sheet">
+    <button class="ghost close" id="closePreview">Close ✕</button>
+    <h2 id="pvTitle" style="margin:0 0 6px"></h2>
+    <div id="pvMeta" class="meta"></div>
+    <div id="pvBody" class="body"></div>
+  </div>
+</div>
+
 <script type="module">
-  // ONE clean module – no duplicates anywhere else on this page.
+  // Single module – no duplicates
   import {
-    auth, getRole, listMyStories, listAllStories,
+    auth, getRole, listMyStories, listAllStories, getStory,
+    getSinglePost, listSeriesParts,
     updateStatus, deleteStory, toast
-  } from "/ayshu/assets/firebase.js?v=109";
+  } from "/ayshu/assets/firebase.js?v=110";
 
   const ownerSec = document.getElementById('ownerSec');
   const mine     = document.getElementById('mine');
   const queue    = document.getElementById('queue');
 
+  const pvWrap   = document.getElementById('preview');
+  const pvTitle  = document.getElementById('pvTitle');
+  const pvMeta   = document.getElementById('pvMeta');
+  const pvBody   = document.getElementById('pvBody');
+  const btnClose = document.getElementById('closePreview');
+
   const OWNER_EMAILS = new Set(["nmmc@live.com","ayshuaysh@gmail.com"]);
+
+  function isOwnerEmail(email){ return OWNER_EMAILS.has((email||"").toLowerCase()); }
+
+  async function isOwner(){
+    const u = auth.currentUser; if (!u) return false;
+    if (isOwnerEmail(u.email)) return true;
+    try { return (await getRole(u.uid)) === "owner"; } catch { return false; }
+  }
+
+  // Simple sanitizer/formatter for paragraphs
+  function renderParagraphs(text){
+    if (!text) return "<p class='muted'>No content.</p>";
+    const safe = text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    return safe.split(/\n{2,}/).map(p=>`<p>${p.replace(/\n/g,' ')}</p>`).join("");
+  }
+
+  // PREVIEW any story (owners + the author), regardless of status
+  async function openPreview(storyId){
+    const u = auth.currentUser;
+    if (!u){ toast("Login required"); return; }
+
+    let s;
+    try { s = await getStory(storyId); }
+    catch { s = null; }
+
+    // If we couldn’t fetch metadata (unlikely with owner/author) just show a message
+    if (!s){
+      pvTitle.textContent = "Unavailable";
+      pvMeta.textContent  = "";
+      pvBody.innerHTML    = "<p class='muted'>Cannot load this story.</p>";
+      pvWrap.classList.add('show');
+      return;
+    }
+
+    // Check owner/author
+    const owner = await isOwner();
+    const isAuthor = (s.authorId && s.authorId === (u.uid||""));
+    if (!(owner || isAuthor) && s.status !== "published"){
+      pvTitle.textContent = "Unavailable";
+      pvMeta.textContent  = "";
+      pvBody.innerHTML    = "<p class='muted'>This story isn’t published yet.</p>";
+      pvWrap.classList.add('show');
+      return;
+    }
+
+    // Fill header/meta
+    pvTitle.textContent = s.title || "(untitled)";
+    pvMeta.textContent  = `${(s.language||'').toUpperCase()} · ${s.type} · ${Array.isArray(s.genres)?s.genres.join(', '):''} · ${s.status}`;
+
+    // Body
+    if (s.type === "single"){
+      const post = await getSinglePost(storyId).catch(()=>null);
+      pvBody.innerHTML = renderParagraphs(post?.body||"");
+    } else {
+      const parts = await listSeriesParts(storyId).catch(()=>[]);
+      if (!parts.length){ pvBody.innerHTML = "<p class='muted'>No parts yet.</p>"; }
+      else {
+        pvBody.innerHTML =
+          parts.map((p,i)=>(
+            `<h3 style="margin:10px 0">${p.title || 'Part ' + (p.partNumber || (i+1))}</h3>` +
+            renderParagraphs(p.body||"")
+          )).join("");
+      }
+    }
+
+    pvWrap.classList.add('show');
+  }
+  btnClose.onclick = ()=> pvWrap.classList.remove('show');
+  pvWrap.addEventListener('click', (e)=>{ if (e.target === pvWrap) pvWrap.classList.remove('show'); });
 
   // Cards
   const cardMy = (s)=>`
@@ -71,6 +173,7 @@
       <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
       <div class="bar" style="margin-top:8px">
         <a class="pill" href="/ayshu/story.html?id=${s.id}">Open</a>
+        <button class="ghost" data-preview="${s.id}">Preview</button>
       </div>
     </div>`;
 
@@ -78,33 +181,18 @@
     <div class="card">
       <div><b>${s.title || '(untitled)'}</b></div>
       <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
-      <div class="bar" style="margin-top:8px">
+      <div class="bar" style="margin-top:8px; flex-wrap:wrap">
+        <button class="ghost" data-preview="${s.id}">Preview</button>
         ${s.status === 'published'
           ? `<button data-act="unpublish" data-id="${s.id}" class="ghost">Unpublish</button>`
           : `<button data-act="publish" data-id="${s.id}">Publish</button>`}
         <button data-act="delete" data-id="${s.id}" class="ghost">Delete</button>
+        <a class="pill" href="/ayshu/story.html?id=${s.id}">Open</a>
       </div>
     </div>`;
 
-  // Determine owner (by email OR roles doc); add ?owner=1 override for emergency
-  async function isOwner() {
-    const u = auth.currentUser;
-    if (!u) return false;
-    const email = (u.email || "").toLowerCase();
-    let viaEmail = OWNER_EMAILS.has(email);
-    let viaRole = false;
-    try {
-      const r = await getRole(u.uid);
-      viaRole = (r === "owner");
-    } catch {}
-    // Debug log (harmless in prod)
-    console.log("[PANEL] user:", email, "viaEmail:", viaEmail, "viaRole:", viaRole);
-    return viaEmail || viaRole || new URLSearchParams(location.search).get("owner") === "1";
-  }
-
   async function load(){
     const u = auth.currentUser;
-
     if (!u){
       mine.innerHTML  = '<div class="muted">Log in to see your submissions.</div>';
       ownerSec.style.display = 'none';
@@ -112,11 +200,11 @@
       return;
     }
 
-    // My submissions
+    // My submissions (author always gets Preview)
     const my = await listMyStories(u.uid, 200).catch(()=>[]);
     mine.innerHTML = my.length ? my.map(cardMy).join('') : '<div class="muted">No submissions yet.</div>';
 
-    // Owner queue
+    // Owner queue (only if owner)
     if (await isOwner()){
       ownerSec.style.display = 'block';
       const all = await listAllStories(400).catch(()=>[]);
@@ -133,9 +221,10 @@
   window.addEventListener('firebase-auth-changed', load);
   load();
 
-  // Actions
+  // Actions (owner)
   queue.addEventListener('click', async (e)=>{
     const btn = e.target.closest('button'); if(!btn) return;
+    if (btn.dataset.preview){ openPreview(btn.dataset.preview); return; }
     const id  = btn.dataset.id, act = btn.dataset.act;
     try{
       if (act === 'publish')   await updateStatus(id,'published');
@@ -143,6 +232,12 @@
       if (act === 'delete' && confirm('Delete this story?')) await deleteStory(id);
       toast('Done'); await load();
     }catch(err){ console.error(err); toast(err?.message || 'Action failed'); }
+  });
+
+  // Actions (author – preview buttons inside "My Submissions")
+  mine.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    if (btn.dataset.preview){ openPreview(btn.dataset.preview); }
   });
 </script>
 
