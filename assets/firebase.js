@@ -245,3 +245,36 @@ export async function bumpHot(id, delta = 1){
 export async function deleteStory(id){
   await deleteDoc(doc(db, "stories", id));
 }
+// ---- SERIES HELPERS ----
+
+// All series stories for a given author (for Write page dropdown)
+export async function listAuthorSeries(uid, limitN=200){
+  const s = await getDocs(query(
+    collection(db,'stories'),
+    where('type','==','series'),
+    where('authorId','==',uid)
+  ));
+  const rows = s.docs.map(d=>({ id:d.id, ...d.data() }));
+  rows.sort((a,b)=>(b?.createdAt?.seconds||0)-(a?.createdAt?.seconds||0));
+  return rows.slice(0,limitN);
+}
+
+// Parts ordered ascending for a series
+export async function listSeriesPartsOrdered(storyId){
+  const s = await getDocs(query(
+    collection(db,'seriesParts'),
+    where('storyId','==',storyId)
+  ));
+  const rows = s.docs.map(d=>({ id:d.id, ...d.data() }));
+  rows.sort((a,b)=>( (a?.partNumber||0) - (b?.partNumber||0) ));
+  return rows;
+}
+
+// Adjacent (prev/next) part by partNumber
+export async function getAdjacentParts(storyId, currentPart){
+  const parts = await listSeriesPartsOrdered(storyId);
+  const idx = parts.findIndex(p => Number(p.partNumber||0) === Number(currentPart||0));
+  const prev = idx>0 ? parts[idx-1] : null;
+  const next = (idx>=0 && idx<parts.length-1) ? parts[idx+1] : null;
+  return { prev, next, parts };
+}
