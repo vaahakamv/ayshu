@@ -144,103 +144,140 @@
     </footer>
   </div>
 </div>
+import {
+  auth, toast,
+  createStoryShell, createSinglePost, addSeriesPart,
+  listAuthorSeries
+} from "/ayshu/assets/firebase.js?v=115";
 
-<script type="module">
-  import { auth, toast, createStoryShell, createSinglePost, addSeriesPart } from "/ayshu/assets/firebase.js?v=114";
+const $ = id => document.getElementById(id);
+const E = {
+  type: $('type'),
+  language: $('language'),
+  title: $('title'),
+  genres: $('genres'),
+  tags: $('tags'),
+  body: $('body'),
+  // series
+  seriesPicker: $('seriesPicker'),
+  seriesSelect: $('seriesSelect'),
+  partWrap: $('partWrap'),
+  partNumber: $('partNumber'),
+  // buttons + notes
+  submit: $('btnSubmit'),
+  clear: $('btnClear'),
+  viewTerms: $('btnViewTerms'),
+  note: $('verifyNote'),
+  agreeStatus: $('agreeStatus'),
+  // modal
+  modal: $('termsModal'),
+  cancelTerms: $('btnCancelTerms'),
+  agreeTerms: $('btnAgreeTerms')
+};
 
-  // ----- elements
-  const $ = id => document.getElementById(id);
-  const E = {
-    type: $('type'),
-    language: $('language'),
-    title: $('title'),
-    genres: $('genres'),
-    tags: $('tags'),
-    body: $('body'),
-    partWrap: $('partWrap'),
-    partNumber: $('partNumber'),
-    submit: $('btnSubmit'),
-    clear: $('btnClear'),
-    viewTerms: $('btnViewTerms'),
-    note: $('verifyNote'),
-    agreeStatus: $('agreeStatus'),
+const TERMS_KEY = 'vaahaka_terms_v1_agreed';
+const getArr = (v) => (v || '').split(',').map(s => s.trim()).filter(Boolean);
+const isAgreed = () => localStorage.getItem(TERMS_KEY) === '1';
+const setAgreed = () => localStorage.setItem(TERMS_KEY, '1');
 
-    modal: $('termsModal'),
-    cancelTerms: $('btnCancelTerms'),
-    agreeTerms: $('btnAgreeTerms')
-  };
+function show(el, flag){ el.style.display = flag ? '' : 'none'; }
 
-  // ----- constants
-  const TERMS_KEY = 'vaahaka_terms_v1_agreed';
-
-  // ----- helpers
-  const getArr = (v) => (v || '').split(',').map(s => s.trim()).filter(Boolean);
-  const isAgreed = () => localStorage.getItem(TERMS_KEY) === '1';
-  const setAgreed = () => localStorage.setItem(TERMS_KEY, '1');
-
-  function show(el, flag){ el.style.display = flag ? '' : 'none'; }
-
-  function updateUIState() {
-    // show/hide verify note
-    const u = auth.currentUser;
-    if (E.note) E.note.style.display = (!u || !u.emailVerified) ? 'block' : 'none';
-
-    // show part number for series
-    show(E.partWrap, E.type.value === 'series');
-
-    // button state
-    const canSubmit = !!u && u.emailVerified && isAgreed() && !!E.title.value.trim();
-    E.submit.classList.toggle('blocked', !canSubmit);
-    E.submit.disabled = !canSubmit;
-
-    E.agreeStatus.textContent = isAgreed()
-      ? 'Terms agreed ✓'
-      : 'You must agree to the submission terms to submit.';
+async function loadAuthorSeries(){
+  const u = auth.currentUser;
+  if (!u) return;
+  const list = await listAuthorSeries(u.uid).catch(()=>[]);
+  // reset options
+  E.seriesSelect.innerHTML = `<option value="__new__" selected>➕ Start a new series…</option>`;
+  for (const s of list){
+    const opt = document.createElement('option');
+    opt.value = s.id;
+    opt.textContent = s.title || `(untitled) — ${s.id.slice(0,6)}`;
+    E.seriesSelect.appendChild(opt);
   }
+}
 
-  function openTerms()  { E.modal.style.display = 'flex'; }
-  function closeTerms() { E.modal.style.display = 'none'; }
+function updateUIState(){
+  // auth note
+  const u = auth.currentUser;
+  if (E.note) E.note.style.display = (!u || !u.emailVerified) ? 'block' : 'none';
 
-  // open terms once if not agreed
-  if (!isAgreed()) openTerms();
+  // series ui
+  const isSeries = (E.type.value === 'series');
+  show(E.partWrap, isSeries);
+  show(E.seriesPicker, isSeries);
 
-  E.viewTerms.onclick   = openTerms;
-  E.cancelTerms.onclick = closeTerms;
-  E.agreeTerms.onclick  = () => {
-    setAgreed();
-    closeTerms();
-    updateUIState();
-    toast('Thanks — terms accepted.');
-  };
+  // button state
+  const canSubmit = !!u && u.emailVerified && isAgreed() && !!E.title.value.trim();
+  E.submit.classList.toggle('blocked', !canSubmit);
+  E.submit.disabled = !canSubmit;
 
-  // clear
-  E.clear.onclick = () => {
-    E.title.value=''; E.genres.value=''; E.tags.value=''; E.body.value='';
-    if (E.type.value === 'series') E.partNumber.value = '1';
-    updateUIState();
-  };
+  E.agreeStatus.textContent = isAgreed()
+    ? 'Terms agreed ✓'
+    : 'You must agree to the submission terms to submit.';
+}
 
-  // react to type change (series part UI) + title typing (enable submit)
-  ['change'].forEach(evt => E.type.addEventListener(evt, updateUIState));
-  ['input','change','keyup'].forEach(evt => E.title.addEventListener(evt, updateUIState));
+function openTerms(){ E.modal.style.display = 'flex'; }
+function closeTerms(){ E.modal.style.display = 'none'; }
 
-  // react to auth changes (auth bar handled by wireAuthBar)
-  window.addEventListener('firebase-auth-changed', updateUIState);
+// open terms once if not agreed
+if (!isAgreed()) openTerms();
+
+E.viewTerms.onclick   = openTerms;
+E.cancelTerms.onclick = closeTerms;
+E.agreeTerms.onclick  = () => { setAgreed(); closeTerms(); updateUIState(); toast('Thanks — terms accepted.'); };
+
+// clear
+E.clear.onclick = () => {
+  E.title.value=''; E.genres.value=''; E.tags.value=''; E.body.value='';
+  if (E.type.value === 'series') E.partNumber.value = '1';
+  E.seriesSelect.value = '__new__';
   updateUIState();
+};
 
-  // submit
-  async function submit() {
-    const u = auth.currentUser;
-    if (!u) { toast('Log in first.'); return; }
-    if (!u.emailVerified) { toast('Verify your email first.'); return; }
-    if (!isAgreed()) { toast('Please agree to the submission terms.'); return; }
-    if (!E.title.value.trim()) { toast('Title required'); return; }
+// reactivity
+E.type.addEventListener('change', async ()=>{
+  updateUIState();
+  if (E.type.value === 'series') await loadAuthorSeries();
+});
+['input','change','keyup'].forEach(evt => E.title.addEventListener(evt, updateUIState));
 
-    E.submit.disabled = true;
-    E.submit.classList.add('blocked');
+// auth reactivity (also refresh series list when logged in)
+window.addEventListener('firebase-auth-changed', async ()=>{
+  updateUIState();
+  if (auth.currentUser && E.type.value === 'series') await loadAuthorSeries();
+});
+updateUIState();
 
-    try {
-      const id = await createStoryShell({
+async function submit(){
+  const u = auth.currentUser;
+  if (!u){ toast('Log in first.'); return; }
+  if (!u.emailVerified){ toast('Verify your email first.'); return; }
+  if (!isAgreed()){ toast('Please agree to the submission terms.'); return; }
+  if (!E.title.value.trim()){ toast('Title required'); return; }
+
+  E.submit.disabled = true; E.submit.classList.add('blocked');
+  try{
+    const isSeries = (E.type.value === 'series');
+    const chosen = isSeries ? E.seriesSelect.value : '__new__';
+    let storyId;
+
+    // (A) existing series → add new part
+    if (isSeries && chosen !== '__new__'){
+      storyId = chosen;
+      const pn = Math.max(1, parseInt(E.partNumber.value || '1', 10));
+      const body = E.body.value.trim();
+      if (body){
+        await addSeriesPart({
+          storyId, partNumber: pn,
+          title: `${E.title.value.trim()} — Part ${pn}`,
+          body
+        });
+      }
+      // keep status flow on the parent story — authors create parts; owners publish the story listing
+    }
+    // (B) new single / new series shell
+    else {
+      storyId = await createStoryShell({
         title: E.title.value.trim(),
         language: E.language.value,
         type: E.type.value,
@@ -250,33 +287,28 @@
       });
 
       const body = E.body.value.trim();
-      if (E.type.value === 'single' && body) {
-        await createSinglePost(id, body);
-      } else if (E.type.value === 'series' && body) {
+      if (E.type.value === 'single' && body){
+        await createSinglePost(storyId, body);
+      } else if (isSeries && body){
         const pn = Math.max(1, parseInt(E.partNumber.value || '1', 10));
         await addSeriesPart({
-          storyId: id,
-          partNumber: pn,
+          storyId, partNumber: pn,
           title: `${E.title.value.trim()} — Part ${pn}`,
           body
         });
       }
-
-      // clear, toast, go to panel
-      E.title.value=''; E.genres.value=''; E.tags.value=''; E.body.value='';
-      if (E.type.value === 'series') E.partNumber.value = '1';
-      toast('Submitted for review ✅');
-      setTimeout(() => location.href = '/ayshu/mypanel.html', 900);
-    } catch (e) {
-      console.error(e);
-      toast(e?.message || 'Submit failed');
-    } finally {
-      E.submit.disabled = false;
-      updateUIState();
     }
-  }
 
+    // clear + go panel
+    E.title.value=''; E.genres.value=''; E.tags.value=''; E.body.value='';
+    if (E.type.value === 'series') E.partNumber.value = '1';
+    E.seriesSelect.value = '__new__';
+    toast('Submitted for review ✅');
+    setTimeout(()=>location.href='/ayshu/mypanel.html', 900);
+  }catch(e){
+    console.error(e); toast(e?.message || 'Submit failed');
+  }finally{
+    E.submit.disabled = false; updateUIState();
+  }
+}
   E.submit.addEventListener('click', submit);
-</script>
-</body>
-</html>
