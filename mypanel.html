@@ -35,8 +35,9 @@
 </header>
 <div id="toast" class="toast"></div>
 
-<!-- Auth bar -->
-<div class="wrap section">
+<!-- BEFORE (yours looked like two sibling divs) -->
+<!-- AFTER (wrap with #authSection) -->
+<div class="wrap section" id="authSection" data-auth-ready="0">
   <div id="authBar" class="card bar" style="display:flex; gap:8px;">
     <input id="email" placeholder="Email">
     <input id="pass" type="password" placeholder="Password">
@@ -49,6 +50,12 @@
     <div class="bar"><button id="btnLogout" class="ghost">Logout</button></div>
   </div>
 </div>
+
+<!-- Keep the tiny script right after, just bump the version to bust cache -->
+<script type="module">
+  import { wireAuthBar } from "/ayshu/assets/firebase.js?v=111";
+  wireAuthBar();
+</script>
 <script type="module">
   import { wireAuthBar } from "/ayshu/assets/firebase.js?v=110";
   wireAuthBar();
