@@ -12,6 +12,35 @@ import {
   getFirestore, collection, addDoc, setDoc, doc, updateDoc, getDoc, getDocs,
   serverTimestamp, query, where, deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+import { getDocsFromServer } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+// === REACTIONS (per-story subcollection) =====================
+// A doc per user:  stories/{storyId}/reactions/{uid}  -> { like: bool, love: bool, updatedAt }
+export async function getMyReaction(storyId, uid) {
+  if (!uid) return { like:false, love:false };
+  const ref = doc(db, 'stories', storyId, 'reactions', uid);
+  const snap = await getDoc(ref);
+  return snap.exists() ? (snap.data() || {like:false,love:false}) : { like:false, love:false };
+}
+
+export async function setReaction(storyId, uid, kind, value) {
+  // kind: 'like' | 'love'; value: boolean
+  if (!uid) throw new Error('Login required');
+  const ref = doc(db, 'stories', storyId, 'reactions', uid);
+  await setDoc(ref, { [kind]: !!value, updatedAt: now() }, { merge: true });
+}
+
+// Lightweight aggregate by counting subcollection docs.
+export async function getReactionsSummary(storyId) {
+  const col = collection(db, 'stories', storyId, 'reactions');
+  const qs  = await getDocsFromServer(col);
+  let like = 0, love = 0;
+  qs.forEach(d => {
+    const v = d.data() || {};
+    if (v.like) like++;
+    if (v.love) love++;
+  });
+  return { like, love };
+}
 
 /* ---------------- Config (your real web config) ---------------- */
 const firebaseConfig = {
