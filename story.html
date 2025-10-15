@@ -1,65 +1,5 @@
-<!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Story · Vaahaka</title>
-<link rel="stylesheet" href="/ayshu/assets/app.css?v=5">
-</head>
-<body>
-
-<header class="nav">
-  <div class="wrap bar" style="justify-content:space-between;">
-    <a href="/ayshu/" class="brand">Vaahaka</a>
-    <nav class="bar">
-      <a href="/ayshu/explore.html">Explore</a>
-      <a href="/ayshu/write.html">Write</a>
-      <a href="/ayshu/about.html">About</a>
-      <a href="/ayshu/mypanel.html">My Panel</a>
-    </nav>
-  </div>
-</header>
-<div id="toast" class="toast"></div>
-
-<div class="wrap">
-  <div class="backbar">
-    <button id="btnBack" class="ghost">← Back</button>
-    <span class="muted">Explore More</span>
-  </div>
-</div>
-
-<div class="reader-wrap">
-  <div class="reader-card">
-    <h2 id="title" class="reader-title"></h2>
-    <div id="meta" class="reader-meta"></div>
-
-    <div class="reader-controls">
-      <div class="group">
-        <span class="muted">Font</span>
-        <button id="fsDec" class="ghost">A−</button>
-        <span id="fsVal" class="fs-display">100%</span>
-        <button id="fsInc">A+</button>
-      </div>
-      <div class="group" id="seriesNavTop" style="display:none">
-        <button id="prevPart" class="ghost">← Previous</button>
-        <button id="nextPart">Next →</button>
-      </div>
-    </div>
-
-    <div id="body" class="reader-body"></div>
-
-    <div class="nav-parts" id="partsList" style="display:none"></div>
-
-    <div class="reader-controls" id="seriesNavBottom" style="display:none">
-      <div class="group"></div>
-      <div class="group">
-        <button id="prevPart2" class="ghost">← Previous</button>
-        <button id="nextPart2">Next →</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <script type="module">
-  import { getStory, getSinglePost, listSeriesParts, bumpHot } from "/ayshu/assets/firebase.js?v=105";
+  import { auth, getRole, getStory, getSinglePost, listSeriesParts, bumpHot } from "/ayshu/assets/firebase.js?v=110";
 
   const $ = (id)=>document.getElementById(id);
   const q = new URLSearchParams(location.search);
@@ -75,7 +15,6 @@
   const prevTop = $('prevPart'), nextTop = $('nextPart');
   const prevBottom = $('prevPart2'), nextBottom = $('nextPart2');
 
-  // Back button (with fallback to Explore)
   $('btnBack').onclick = () => {
     if (document.referrer && new URL(document.referrer).origin === location.origin) {
       history.back();
@@ -84,7 +23,7 @@
     }
   };
 
-  // Font size control (persisted)
+  // Font size controls (same as before)
   const FS_KEY = "vaahaka.fs";
   const fsVal = $('fsVal'), fsInc = $('fsInc'), fsDec = $('fsDec');
   const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
@@ -98,7 +37,6 @@
   fsInc.onclick = ()=>{ fs = clamp(fs+10, 80,160); applyFs(fs); };
   fsDec.onclick = ()=>{ fs = clamp(fs-10, 80,160); applyFs(fs); };
 
-  // Render helpers
   function renderParagraphs(text){
     if (!text) return "<p class='muted'>No content.</p>";
     const safe = text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -117,7 +55,7 @@
     const go = (i)=>{
       const part = parts[i];
       const url = new URL(location.href);
-      url.searchParams.set('part', String(part.partNumber|| (i+1)));
+      url.searchParams.set('part', String(part.partNumber || (i+1)));
       history.replaceState({}, "", url.toString());
       drawSeries(parts, i);
     };
@@ -138,15 +76,65 @@
     updateSeriesNav(parts, idx);
   }
 
-  async function load(){
-    if (!storyId){ $('title').textContent="Story not found"; bodyEl.innerHTML="<p class='muted'>Story not found.</p>"; return; }
-    const s = await getStory(storyId);
-    if (!s){ $('title').textContent="Story not found"; bodyEl.innerHTML="<p class='muted'>Story not found.</p>"; return; }
-    document.title = (s.title||"Story") + " · Vaahaka";
-    $('title').textContent = s.title || "(untitled)";
-    $('meta').textContent = `${(s.language||'').toUpperCase()} · ${s.type} · ${Array.isArray(s.genres)?s.genres.join(', '):''}`;
+  async function isOwnerOrAuthor(s){
+    const u = auth.currentUser;
+    if (!u) return false;
+    const email = (u.email || "").toLowerCase();
+    if (email === "nmmc@live.com" || email === "ayshuaysh@gmail.com") return true;
+    if (s?.authorId && s.authorId === u.uid) return true;
+    try { return (await getRole(u.uid)) === "owner"; } catch { return false; }
+  }
 
-    if (s.type === "single"){
+  function showPreviewBanner(){
+    const wrap = document.querySelector('.reader-card');
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.style.marginBottom = '12px';
+    div.style.background = '#fff7ef';
+    div.style.borderColor = '#ffd9ba';
+    div.innerHTML = '<b>Preview:</b> this story is not published yet. Only owners and the author can see this.';
+    wrap.parentNode.insertBefore(div, wrap);
+  }
+
+  async function load(){
+    if (!storyId){
+      $('title').textContent="Story not found";
+      bodyEl.innerHTML="<p class='muted'>Story not found.</p>";
+      return;
+    }
+
+    // Get metadata
+    let s;
+    try { s = await getStory(storyId); }
+    catch (e) {
+      // If rules block metadata for public while unpublished, we’ll still handle below
+      s = null;
+    }
+
+    // If not published, only owners/authors should proceed
+    if (!s || s.status !== "published"){
+      const allowed = s ? await isOwnerOrAuthor(s) : await isOwnerOrAuthor(null);
+      if (!allowed){
+        document.title = "Unavailable · Vaahaka";
+        $('title').textContent = "Unavailable";
+        $('meta').textContent = "";
+        bodyEl.innerHTML = "<p class='muted'>This story isn’t published yet.</p>";
+        navTop.style.display = navBottom.style.display = 'none';
+        partsList.style.display = 'none';
+        return;
+      } else {
+        showPreviewBanner();
+      }
+    }
+
+    // Render header/meta
+    const meta = s || {};
+    document.title = (meta.title||"Story") + " · Vaahaka";
+    $('title').textContent = meta.title || "(untitled)";
+    $('meta').textContent = `${(meta.language||'').toUpperCase()} · ${meta.type||''} · ${Array.isArray(meta.genres)?meta.genres.join(', '):''}`;
+
+    // Body
+    if ((s?.type || meta.type) === "single"){
       const post = await getSinglePost(storyId);
       bodyEl.innerHTML = renderParagraphs(post?.body||"");
       navTop.style.display = navBottom.style.display = 'none';
@@ -159,8 +147,9 @@
       drawSeries(parts, idx);
     }
 
-    try{ await bumpHot(storyId, 1); }catch{}
+    try { await bumpHot(storyId, 1); } catch {}
   }
+
+  window.addEventListener('firebase-auth-changed', load);
   load();
 </script>
-</body></html>
