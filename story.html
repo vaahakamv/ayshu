@@ -1,8 +1,45 @@
 <!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Story · Vaahaka</title>
-<link rel="stylesheet" href="/ayshu/assets/app.css?v=5">
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Story · Vaahaka</title>
+  <link rel="stylesheet" href="/ayshu/assets/app.css?v=8">
+  <style>
+    .wrap-narrow{max-width:900px;margin:0 auto;padding:0 14px}
+    .topbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:14px 0}
+    .title{margin:6px 0 2px}
+    .meta{color:var(--muted);margin-bottom:10px}
+
+    /* parts chips */
+    #parts{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 16px}
+    .chip{border:1px solid var(--border);border-radius:999px;padding:6px 10px;font-size:13px}
+    .chip.active{background:#fff5ea;border-color:#ffd9a8}
+
+    /* reader */
+    .reader{background:#fff;border:1px solid var(--border);border-radius:20px;box-shadow:0 30px 80px rgba(20,12,0,.08);padding:18px}
+    .reader-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px}
+    .controls{display:flex;gap:6px;align-items:center}
+    .fsbtn{min-width:36px;height:32px}
+    .story-body{font-size:1.06rem;line-height:1.85}
+    .story-body p{margin:0 0 1.05em}
+    .story-body p + p{text-indent:1.05em}
+
+    /* prev/next */
+    .pager{display:flex;justify-content:space-between;margin-top:16px}
+
+    /* anti-copy: only the reading zone */
+    .nocopy{
+      -webkit-user-select:none;user-select:none;
+    }
+    .watermark{
+      pointer-events:none; position:fixed; inset:auto 0 8px 0;
+      text-align:center; font-size:11px; color:rgba(0,0,0,.25);
+    }
+
+    @media (min-width: 800px){
+      .story-body{font-size:1.12rem}
+    }
+  </style>
 </head>
 <body>
 
@@ -19,118 +56,133 @@
 </header>
 <div id="toast" class="toast"></div>
 
-<div class="wrap">
-  <div class="backbar">
-    <button id="btnBack" class="ghost">← Back</button>
-    <span class="muted">Explore More</span>
-  </div>
-</div>
-<h1 id="title"></h1>
-<div id="meta" class="muted"></div>
-
-<!-- Show for series -->
-<div id="parts" class="bar" style="flex-wrap:wrap; gap:8px; margin:10px 0"></div>
-
-<div id="body" class="story"></div>
-
-<!-- Prev / Next -->
-<div id="nav"></div>
-
-<div class="reader-wrap">
-  <div class="reader-card">
-    <h2 id="title" class="reader-title"></h2>
-    <div id="meta" class="reader-meta"></div>
-
-    <div class="reader-controls">
-      <div class="group">
-        <span class="muted">Font</span>
-        <button id="fsDec" class="ghost">A−</button>
-        <span id="fsVal" class="fs-display">100%</span>
-        <button id="fsInc">A+</button>
-      </div>
-      <div class="group" id="seriesNavTop" style="display:none">
-        <button id="prevPart" class="ghost">← Previous</button>
-        <button id="nextPart">Next →</button>
-      </div>
-    </div>
-
-    <div id="body" class="reader-body"></div>
-
-    <div class="nav-parts" id="partsList" style="display:none"></div>
-
-    <div class="reader-controls" id="seriesNavBottom" style="display:none">
-      <div class="group"></div>
-      <div class="group">
-        <button id="prevPart2" class="ghost">← Previous</button>
-        <button id="nextPart2">Next →</button>
-      </div>
+<div class="wrap-narrow">
+  <div class="topbar">
+    <button id="btnClose" class="ghost">✕ Close</button>
+    <div class="controls">
+      <span class="muted" style="font-size:12px">Font</span>
+      <button id="fsDec" class="ghost fsbtn" aria-label="Smaller">A−</button>
+      <button id="fsInc" class="fsbtn" aria-label="Bigger">A+</button>
     </div>
   </div>
+
+  <h1 id="title" class="title"></h1>
+  <div id="meta" class="meta"></div>
+
+  <!-- Series parts chips -->
+  <div id="parts"></div>
+
+  <div class="reader">
+    <div id="body" class="story-body nocopy"></div>
+    <div id="nav" class="pager"></div>
+  </div>
+
+  <div id="wm" class="watermark" style="display:none"></div>
 </div>
 
 <script type="module">
   import {
     auth, getStory, getSinglePost,
     listSeriesPartsOrdered, getAdjacentParts, bumpHot
-  } from "/ayshu/assets/firebase.js?v=115";
+  } from "/ayshu/assets/firebase.js?v=116";
 
+  // ---- helpers
   const Q = new URLSearchParams(location.search);
-  const id = Q.get('id');
-  const partParam = Number(Q.get('part')||0) || null;
+  const storyId = Q.get('id');
+  const partParam = Number(Q.get('part') || 0) || null;
 
-  const titleEl = document.getElementById('title');
-  const metaEl  = document.getElementById('meta');
-  const bodyEl  = document.getElementById('body');
-  const partsEl = document.getElementById('parts');      // <div id="parts"></div> in your layout (add if missing)
-  const navEl   = document.getElementById('nav');        // <div id="nav"></div>   in your layout (add if missing)
+  const $ = (id)=>document.getElementById(id);
+  const titleEl = $('title'), metaEl=$('meta'), bodyEl=$('body'), partsEl=$('parts'), navEl=$('nav');
+  const btnClose = $('btnClose'), fsDec=$('fsDec'), fsInc=$('fsInc'), wm=$('wm');
 
-  function esc(s){ return (s||'').replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-  function paras(text){ return (text||'').split(/\n{2,}/).map(p=>`<p>${esc(p).replace(/\n/g,' ')}</p>`).join(''); }
-  function linkTo(storyId, pn){ return `/ayshu/story.html?id=${encodeURIComponent(storyId)}${pn?`&part=${pn}`:''}`; }
+  const esc = (s)=> (s||'').replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const paras = (text)=> (text||'').split(/\n{2,}/).map(p=>`<p>${esc(p).replace(/\n/g,' ')}</p>`).join('');
+  const linkTo = (sid, pn)=> `/ayshu/story.html?id=${encodeURIComponent(sid)}${pn?`&part=${pn}`:''}`;
+
+  // Close → back if possible else Explore
+  btnClose.onclick = ()=>{
+    if (document.referrer && new URL(document.referrer).origin === location.origin){
+      history.back();
+    } else {
+      location.href = '/ayshu/explore.html';
+    }
+  };
+
+  // Font size controls (persist per-session)
+  const FS_KEY = 'vaahaka_reader_fs';
+  function setFs(pct){
+    const clamp = Math.max(80, Math.min(160, pct|0));
+    bodyEl.style.fontSize = clamp + '%';
+    sessionStorage.setItem(FS_KEY, String(clamp));
+  }
+  fsDec.onclick = ()=> setFs((+sessionStorage.getItem(FS_KEY) || 106) - 8);
+  fsInc.onclick = ()=> setFs((+sessionStorage.getItem(FS_KEY) || 106) + 8);
+  setFs(+sessionStorage.getItem(FS_KEY) || 106);
+
+  // Anti-copy (can’t block screenshots, but this deters quick copying)
+  function attachNoCopy(el){
+    const stop = (e)=>{ e.preventDefault(); e.stopPropagation(); return false; };
+    el.addEventListener('copy', stop);
+    el.addEventListener('cut', stop);
+    el.addEventListener('contextmenu', stop);
+    el.addEventListener('dragstart', stop);
+  }
+  attachNoCopy(bodyEl);
+
+  // Optional watermark (only if logged in)
+  function showWatermark(){
+    const u = auth.currentUser;
+    if (!u) { wm.style.display = 'none'; return; }
+    const ts = new Date().toLocaleString();
+    wm.textContent = `Read by ${u.email || 'user'} · ${ts} · Vaahaka`;
+    wm.style.display = 'block';
+  }
+  window.addEventListener('firebase-auth-changed', showWatermark);
 
   async function load(){
-    const s = await getStory(id).catch(()=>null);
-    if (!s){ titleEl.textContent = 'Not found'; bodyEl.innerHTML = ''; return; }
+    const s = await getStory(storyId).catch(()=>null);
+    if (!s){ titleEl.textContent='Not found'; metaEl.textContent=''; bodyEl.innerHTML=''; partsEl.innerHTML=''; navEl.innerHTML=''; return; }
 
     titleEl.textContent = s.title || '(untitled)';
     metaEl.textContent  = `${(s.language||'').toUpperCase()} · ${s.type} · ${Array.isArray(s.genres)?s.genres.join(', '):''}`;
 
     if (s.type === 'single'){
-      const post = await getSinglePost(id).catch(()=>null);
-      bodyEl.innerHTML = paras(post?.body||'');
-      partsEl && (partsEl.innerHTML = '');
-      navEl && (navEl.innerHTML = '');
+      const post = await getSinglePost(storyId).catch(()=>null);
+      bodyEl.innerHTML = paras(post?.body || '');
+      partsEl.innerHTML = '';
+      navEl.innerHTML = '';
     } else {
-      // SERIES: list parts + render a selected part (or the first)
-      const parts = await listSeriesPartsOrdered(id);
-      if (!parts.length){ bodyEl.innerHTML = '<p class="muted">No parts yet.</p>'; return; }
+      // SERIES: list parts & render current
+      const parts = await listSeriesPartsOrdered(storyId).catch(()=>[]);
+      if (!parts.length){ bodyEl.innerHTML = '<p class="muted">No parts yet.</p>'; partsEl.innerHTML=''; navEl.innerHTML=''; return; }
 
-      // sidebar/list of parts
-      if (partsEl){
-        partsEl.innerHTML = parts.map(p=>{
-          const active = (Number(p.partNumber||0) === (partParam || Number(parts[0].partNumber||0)));
-          return `<a class="pill ${active?'active':''}" href="${linkTo(id, p.partNumber)}">${esc(p.title || `Part ${p.partNumber}`)}</a>`;
-        }).join(' ');
-      }
+      const firstPn = Number(parts[0].partNumber || 1);
+      const currentPn = partParam || firstPn;
 
-      // pick current
-      const current = parts.find(p=> Number(p.partNumber||0) === (partParam || Number(parts[0].partNumber||0))) || parts[0];
-      bodyEl.innerHTML = paras(current?.body||'');
+      // chips
+      partsEl.innerHTML = parts.map(p=>{
+        const active = Number(p.partNumber||0) === currentPn;
+        const label  = esc(p.title || `Part ${p.partNumber}`);
+        return `<a class="chip ${active?'active':''}" href="${linkTo(storyId, p.partNumber)}">${label}</a>`;
+      }).join('');
 
-      // prev/next nav
-      if (navEl){
-        const { prev, next } = await getAdjacentParts(id, current.partNumber);
-        navEl.innerHTML = `
-          <div class="bar" style="justify-content:space-between; margin-top:16px">
-            ${prev ? `<a class="ghost" href="${linkTo(id, prev.partNumber)}">← Previous</a>` : '<span></span>'}
-            ${next ? `<a class="pill"  href="${linkTo(id, next.partNumber)}">Next →</a>` : '<span class="muted">End of series</span>'}
-          </div>`;
-      }
+      // body of current
+      const current = parts.find(p=> Number(p.partNumber||0) === currentPn) || parts[0];
+      bodyEl.innerHTML = paras(current?.body || '');
+
+      // prev / next
+      const { prev, next } = await getAdjacentParts(storyId, current.partNumber).catch(()=>({}));
+      navEl.innerHTML = `
+        ${prev ? `<a class="ghost" href="${linkTo(storyId, prev.partNumber)}">← Previous</a>` : '<span></span>'}
+        ${next ? `<a class="pill"  href="${linkTo(storyId, next.partNumber)}">Next →</a>` : '<span class="muted">End of series</span>'}
+      `;
     }
 
-    // bump hot score lightly when opened
-    try{ await bumpHot(id, 1); }catch{}
+    try{ await bumpHot(storyId, 1); }catch{}
+    showWatermark();
   }
 
   load();
 </script>
+</body>
+</html>
