@@ -173,30 +173,34 @@
   btnClose.onclick = ()=> pvWrap.classList.remove('show');
   pvWrap.addEventListener('click', (e)=>{ if (e.target === pvWrap) pvWrap.classList.remove('show'); });
 
-  // Cards
-  const cardMy = (s)=>`
-    <div class="card">
-      <div><b>${s.title || '(untitled)'}</b></div>
-      <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
-      <div class="bar" style="margin-top:8px">
-        <a class="pill" href="/ayshu/story.html?id=${s.id}">Open</a>
-        <button class="ghost" data-preview="${s.id}">Preview</button>
-      </div>
-    </div>`;
+// ONE action per story: published -> Open, else -> Preview
+const actionBtn = (s) =>
+  s.status === 'published'
+    ? `<a class="pill" href="/ayshu/story.html?id=${s.id}" target="_blank" rel="noopener">Open</a>`
+    : `<button class="pill" data-preview="${s.id}">Preview</button>`;
 
-  const cardOwner = (s)=>`
-    <div class="card">
-      <div><b>${s.title || '(untitled)'}</b></div>
-      <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
-      <div class="bar" style="margin-top:8px; flex-wrap:wrap">
-        <button class="ghost" data-preview="${s.id}">Preview</button>
-        ${s.status === 'published'
-          ? `<button data-act="unpublish" data-id="${s.id}" class="ghost">Unpublish</button>`
-          : `<button data-act="publish" data-id="${s.id}">Publish</button>`}
-        <button data-act="delete" data-id="${s.id}" class="ghost">Delete</button>
-        <a class="pill" href="/ayshu/story.html?id=${s.id}">Open</a>
-      </div>
-    </div>`;
+const cardMy = (s)=>`
+  <div class="card">
+    <div><b>${s.title || '(untitled)'}</b></div>
+    <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
+    <div class="bar" style="margin-top:8px">
+      ${actionBtn(s)}
+    </div>
+  </div>`;
+
+const cardOwner = (s)=>`
+  <div class="card">
+    <div><b>${s.title || '(untitled)'}</b></div>
+    <div class="muted">${(s.language||'').toUpperCase()} · ${s.type} · <b>${s.status}</b></div>
+    <div class="bar" style="margin-top:8px; flex-wrap:wrap">
+      ${actionBtn(s)}
+      ${s.status === 'published'
+        ? `<button data-act="unpublish" data-id="${s.id}" class="ghost">Unpublish</button>`
+        : `<button data-act="publish" data-id="${s.id}">Publish</button>`}
+      <button data-act="delete" data-id="${s.id}" class="ghost">Delete</button>
+    </div>
+  </div>`;
+
 
   async function load(){
     const u = auth.currentUser;
