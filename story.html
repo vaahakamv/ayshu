@@ -59,108 +59,68 @@
 </div>
 
 <script type="module">
-  import { getStory, getSinglePost, listSeriesParts, bumpHot } from "/ayshu/assets/firebase.js?v=105";
+  import {
+    auth, getStory, getSinglePost,
+    listSeriesPartsOrdered, getAdjacentParts, bumpHot
+  } from "/ayshu/assets/firebase.js?v=115";
 
-  const $ = (id)=>document.getElementById(id);
-  const q = new URLSearchParams(location.search);
-  const storyId = q.get('id');
-  const partFromUrl = parseInt(q.get('part') || '1', 10);
+  const Q = new URLSearchParams(location.search);
+  const id = Q.get('id');
+  const partParam = Number(Q.get('part')||0) || null;
 
-  const titleEl = $('title');
-  const metaEl  = $('meta');
-  const bodyEl  = $('body');
-  const partsList = $('partsList');
-  const navTop = $('seriesNavTop');
-  const navBottom = $('seriesNavBottom');
-  const prevTop = $('prevPart'), nextTop = $('nextPart');
-  const prevBottom = $('prevPart2'), nextBottom = $('nextPart2');
+  const titleEl = document.getElementById('title');
+  const metaEl  = document.getElementById('meta');
+  const bodyEl  = document.getElementById('body');
+  const partsEl = document.getElementById('parts');      // <div id="parts"></div> in your layout (add if missing)
+  const navEl   = document.getElementById('nav');        // <div id="nav"></div>   in your layout (add if missing)
 
-  // Back button (with fallback to Explore)
-  $('btnBack').onclick = () => {
-    if (document.referrer && new URL(document.referrer).origin === location.origin) {
-      history.back();
-    } else {
-      location.href = "/ayshu/explore.html";
-    }
-  };
-
-  // Font size control (persisted)
-  const FS_KEY = "vaahaka.fs";
-  const fsVal = $('fsVal'), fsInc = $('fsInc'), fsDec = $('fsDec');
-  const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
-  function applyFs(percent){
-    fsVal.textContent = percent + "%";
-    bodyEl.style.fontSize = (percent/100) + "rem";
-    localStorage.setItem(FS_KEY, String(percent));
-  }
-  let fs = parseInt(localStorage.getItem(FS_KEY)||"100",10); if (isNaN(fs)) fs=100;
-  applyFs(clamp(fs,80,160));
-  fsInc.onclick = ()=>{ fs = clamp(fs+10, 80,160); applyFs(fs); };
-  fsDec.onclick = ()=>{ fs = clamp(fs-10, 80,160); applyFs(fs); };
-
-  // Render helpers
-  function renderParagraphs(text){
-    if (!text) return "<p class='muted'>No content.</p>";
-    const safe = text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    return safe.split(/\n{2,}/).map(p=>`<p>${p.replace(/\n/g,' ')}</p>`).join("");
-  }
-
-  function updateSeriesNav(parts, idx){
-    const count = parts.length;
-    const hasPrev = idx > 0;
-    const hasNext = idx < count-1;
-
-    navTop.style.display = navBottom.style.display = (count>1) ? 'flex' : 'none';
-    prevTop.style.display = prevBottom.style.display = hasPrev ? 'inline-block' : 'none';
-    nextTop.style.display = nextBottom.style.display = hasNext ? 'inline-block' : 'none';
-
-    const go = (i)=>{
-      const part = parts[i];
-      const url = new URL(location.href);
-      url.searchParams.set('part', String(part.partNumber|| (i+1)));
-      history.replaceState({}, "", url.toString());
-      drawSeries(parts, i);
-    };
-    prevTop.onclick = prevBottom.onclick = ()=> hasPrev && go(idx-1);
-    nextTop.onclick = nextBottom.onclick = ()=> hasNext && go(idx+1);
-  }
-
-  function drawSeries(parts, idx){
-    const p = parts[idx];
-    bodyEl.innerHTML = `<h3 style="margin:0 0 10px">${p.title || ('Part '+ (p.partNumber||idx+1))}</h3>` + renderParagraphs(p.body||"");
-    partsList.style.display = 'flex';
-    partsList.innerHTML = parts.map((x,i)=>`<button class="pill ${i===idx?'part-active':''}" data-i="${i}">${x.partNumber || (i+1)}</button>`).join("");
-    partsList.onclick = (e)=>{
-      const btn = e.target.closest('button'); if(!btn) return;
-      const i = parseInt(btn.dataset.i,10); drawSeries(parts, i); updateSeriesNav(parts, i);
-      const url = new URL(location.href); url.searchParams.set('part', String(parts[i].partNumber|| (i+1))); history.replaceState({}, "", url.toString());
-    };
-    updateSeriesNav(parts, idx);
-  }
+  function esc(s){ return (s||'').replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+  function paras(text){ return (text||'').split(/\n{2,}/).map(p=>`<p>${esc(p).replace(/\n/g,' ')}</p>`).join(''); }
+  function linkTo(storyId, pn){ return `/ayshu/story.html?id=${encodeURIComponent(storyId)}${pn?`&part=${pn}`:''}`; }
 
   async function load(){
-    if (!storyId){ $('title').textContent="Story not found"; bodyEl.innerHTML="<p class='muted'>Story not found.</p>"; return; }
-    const s = await getStory(storyId);
-    if (!s){ $('title').textContent="Story not found"; bodyEl.innerHTML="<p class='muted'>Story not found.</p>"; return; }
-    document.title = (s.title||"Story") + " · Vaahaka";
-    $('title').textContent = s.title || "(untitled)";
-    $('meta').textContent = `${(s.language||'').toUpperCase()} · ${s.type} · ${Array.isArray(s.genres)?s.genres.join(', '):''}`;
+    const s = await getStory(id).catch(()=>null);
+    if (!s){ titleEl.textContent = 'Not found'; bodyEl.innerHTML = ''; return; }
 
-    if (s.type === "single"){
-      const post = await getSinglePost(storyId);
-      bodyEl.innerHTML = renderParagraphs(post?.body||"");
-      navTop.style.display = navBottom.style.display = 'none';
-      partsList.style.display = 'none';
+    titleEl.textContent = s.title || '(untitled)';
+    metaEl.textContent  = `${(s.language||'').toUpperCase()} · ${s.type} · ${Array.isArray(s.genres)?s.genres.join(', '):''}`;
+
+    if (s.type === 'single'){
+      const post = await getSinglePost(id).catch(()=>null);
+      bodyEl.innerHTML = paras(post?.body||'');
+      partsEl && (partsEl.innerHTML = '');
+      navEl && (navEl.innerHTML = '');
     } else {
-      const parts = await listSeriesParts(storyId);
-      if (!parts.length){ bodyEl.innerHTML = "<p class='muted'>No parts yet.</p>"; return; }
-      let idx = parts.findIndex(p=> (p.partNumber||0) === partFromUrl);
-      if (idx === -1) idx = 0;
-      drawSeries(parts, idx);
+      // SERIES: list parts + render a selected part (or the first)
+      const parts = await listSeriesPartsOrdered(id);
+      if (!parts.length){ bodyEl.innerHTML = '<p class="muted">No parts yet.</p>'; return; }
+
+      // sidebar/list of parts
+      if (partsEl){
+        partsEl.innerHTML = parts.map(p=>{
+          const active = (Number(p.partNumber||0) === (partParam || Number(parts[0].partNumber||0)));
+          return `<a class="pill ${active?'active':''}" href="${linkTo(id, p.partNumber)}">${esc(p.title || `Part ${p.partNumber}`)}</a>`;
+        }).join(' ');
+      }
+
+      // pick current
+      const current = parts.find(p=> Number(p.partNumber||0) === (partParam || Number(parts[0].partNumber||0))) || parts[0];
+      bodyEl.innerHTML = paras(current?.body||'');
+
+      // prev/next nav
+      if (navEl){
+        const { prev, next } = await getAdjacentParts(id, current.partNumber);
+        navEl.innerHTML = `
+          <div class="bar" style="justify-content:space-between; margin-top:16px">
+            ${prev ? `<a class="ghost" href="${linkTo(id, prev.partNumber)}">← Previous</a>` : '<span></span>'}
+            ${next ? `<a class="pill"  href="${linkTo(id, next.partNumber)}">Next →</a>` : '<span class="muted">End of series</span>'}
+          </div>`;
+      }
     }
 
-    try{ await bumpHot(storyId, 1); }catch{}
+    // bump hot score lightly when opened
+    try{ await bumpHot(id, 1); }catch{}
   }
+
   load();
 </script>
-</body></html>
